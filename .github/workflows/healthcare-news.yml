@@ -1,513 +1,515 @@
 name: Weekly Healthcare Intelligence
 
-# Builds the Beyond the Yellow healthcare report from public news feeds and
-# posts it to Slack every Monday at 9am Eastern. Runs entirely on GitHub —
-# no laptop required, and no API keys or tokens needed. The only secret used
-# is SLACK_WEBHOOK_URL.
-
-on:
-  # GitHub cron is UTC and does NOT adjust for daylight saving, so we fire at
-  # both candidate hours and the guard step keeps only the 9am-Eastern run.
-  schedule:
-    - cron: '0 13 * * 1'   # 09:00 America/New_York during EDT (summer)
-    - cron: '0 14 * * 1'   # 09:00 America/New_York during EST (winter)
-  workflow_dispatch: {}     # lets you run it manually from the Actions tab
-
-permissions:
-  contents: write           # allow the job to commit the regenerated page
-
-concurrency:
-  group: healthcare-news
-  cancel-in-progress: false
-
-jobs:
-  generate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Only continue at 9am Eastern
-        id: guard
-        run: |
-          HOUR="$(TZ=America/New_York date +%H)"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$HOUR" != "09" ]; then
-            echo "It's ${HOUR}:00 Eastern, not 09:00 — skipping this run."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout repo
-        if: steps.guard.outputs.run == 'true'
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        if: steps.guard.outputs.run == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Build the report from news feeds
-        if: steps.guard.outputs.run == 'true'
-        run: |
-          python3 - <<'PY'
-          #!/usr/bin/env python3
-          """Beyond the Yellow — weekly healthcare report builder (feed-based).
-
-          No AI, no API keys. Pulls public healthcare-news RSS feeds, keeps the last
-          7 days, sorts stories into the Beyond the Yellow themed sections, flags
-          under-tracked topics ("What You're Not Tracking"), lists prior reports, and
-          writes index.html + a dated archive + top3.txt.
-
-          This is the automated edition: it matches the tailored report's layout and
-          themes, but fills cards with the article's own summary. It deliberately does
-          NOT invent per-story "Strategic angle" analysis — that's human/AI work.
-
-          Uses only the Python standard library. Run with --selftest to render from
-          built-in sample stories without touching the network.
-          """
-
-          import glob
-          import html
-          import re
-          import sys
-          import urllib.request
-          from datetime import datetime, timedelta, timezone
-          from email.utils import parsedate_to_datetime
-          from xml.etree import ElementTree as ET
-
-          # (display name, feed url)
-          FEEDS = [
-              ("Fierce Healthcare", "https://www.fiercehealthcare.com/rss/xml"),
-              ("STAT News", "https://www.statnews.com/feed/"),
-              ("MedCity News", "https://medcitynews.com/feed/"),
-              ("Healthcare Dive", "https://www.healthcaredive.com/feeds/news/"),
-              ("MobiHealthNews", "https://www.mobihealthnews.com/feed"),
-              ("Healthcare IT News", "https://www.healthcareitnews.com/home/feed"),
-              ("Healthcare Finance News", "https://www.healthcarefinancenews.com/home/feed"),
-              ("Behavioral Health Business", "https://bhbusiness.com/feed/"),
-          ]
-
-          # Beyond the Yellow themed sections. A story lands in the FIRST theme it
-          # matches. Each has a static, descriptive intro (no invented statistics).
-          THEMES = [
-              ("AI as Healthcare Interface",
-               "AI agents, health search, care navigation, and clinical workflow.",
-               ["artificial intelligence", " ai ", "ai-", "ai,", "ai.", "chatgpt", "copilot",
-                "openai", "anthropic", "perplexity", "machine learning", "llm", "chatbot",
-                "agentforce", "care navigation", "clinical workflow", "automation", "algorithm"]),
-              ("Distribution, Partnerships & Front-Door Control",
-               "Platform partnerships, marketplaces, and who owns the patient's first click.",
-               ["partnership", "partners with", "collaborat", "integration", "channel",
-                "front door", "front-door", "mychart", "showroom", "marketplace", "distribution",
-                "retail", "one medical", "joins forces", "teams up", "strategic"]),
-              ("Pricing, Payment & Affordability",
-               "Costs, coverage, GLP-1s, price transparency, and shoppable care.",
-               ["price", "pricing", "payment", "affordab", "cost", "glp-1", "glp1", "copay",
-                "reimburse", "bundled payment", "transparency", "cash pricing", "out-of-pocket",
-                "premium", "deductible", "value-based"]),
-              ("Regulatory, Policy & Interoperability",
-               "CMS, HHS, FDA, data standards, prior auth, and information blocking.",
-               ["cms", "hhs", "fda", "ftc", "regulation", "policy", "congress", "senate",
-                "house", "legislation", " bill ", "hipaa", "tefca", "fhir", "interoperab",
-                "prior auth", "information blocking", "rule", "federal", "medicare", "medicaid"]),
-              ("Consumer Health, Labs & Wearables",
-               "Wearables, at-home testing, and direct-to-consumer health.",
-               ["wearable", "oura", "whoop", "fitbit", "apple watch", "garmin", "samsung health",
-                "lab test", "dtc", "direct-to-consumer", "consumer health", "at-home test",
-                "biometric", "dexa", "blood test"]),
-              ("Competitive Ecosystem & M&A/Funding",
-               "Deals, funding rounds, mergers, and competitive moves.",
-               ["raises", "raised", "funding", "series a", "series b", "series c", "series d",
-                "acquisition", "acquires", "acquire", "merger", "m&a", "valuation", "ipo",
-                "venture", "funding round", "invests", "billion", "million", "startup"]),
-          ]
-          FALLBACK_THEME = ("Other Industry News",
-                            "Notable healthcare stories from this week's feeds.", [])
-
-          # Topics Beyond the Yellow tends to UNDER-track — surfaced separately with a
-          # badge so they don't get lost. (label, [keywords])
-          GAP_TOPICS = [
-              ("Behavioral Health", ["behavioral health", "mental health", "psychiatry",
-                                      "substance use", "therapy", "depression", "anxiety"]),
-              ("Telehealth", ["telehealth", "telemedicine", "virtual care", "virtual-first"]),
-              ("Health Equity", ["health equity", "sdoh", "social determinants", "underserved",
-                                 "disparities", "access to care"]),
-              ("Patient Trust & Brand", ["patient trust", "patient experience", "reputation",
-                                         "reviews", "satisfaction"]),
-              ("Workforce", ["burnout", "workforce", "nurse shortage", "staffing",
-                             "clinician shortage", "physician shortage"]),
-              ("Rural Health", ["rural health", "rural hospital", "rural care"]),
-          ]
-
-          WINDOW_DAYS = 7
-          MAX_PER_THEME = 8
-          MAX_GAP_ITEMS = 5
-          HTTP_TIMEOUT = 25
-          UA = "BeyondTheYellow-NewsBot/1.0 (+https://github.com/melissamorgenstern/beyond-the-yellow)"
-
-
-          def clean(text):
-              text = re.sub(r"<[^>]+>", " ", text or "")
-              text = html.unescape(text)
-              return re.sub(r"\s+", " ", text).strip()
-
-
-          def parse_date(value):
-              if not value:
-                  return None
-              value = value.strip()
-              try:
-                  dt = parsedate_to_datetime(value)
-                  if dt is not None:
-                      return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-              except (TypeError, ValueError):
-                  pass
-              try:
-                  dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                  return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-              except ValueError:
-                  return None
-
-
-          def _text(el):
-              return el.text if el is not None and el.text else ""
-
-
-          def parse_feed(xml_bytes, source):
-              stories = []
-              root = ET.fromstring(xml_bytes)
-              items = root.findall(".//item")
-              if items:
-                  for it in items:
-                      stories.append({
-                          "source": source,
-                          "title": clean(_text(it.find("title"))),
-                          "link": _text(it.find("link")).strip(),
-                          "summary": clean(_text(it.find("description"))),
-                          "date": parse_date(_text(it.find("pubDate"))),
-                      })
-                  return stories
-              ns = {"a": "http://www.w3.org/2005/Atom"}
-              entries = root.findall(".//a:entry", ns) or root.findall(".//{*}entry")
-              for en in entries:
-                  link_el = en.find("a:link", ns) or en.find("{*}link")
-                  link = link_el.get("href") if link_el is not None else ""
-                  summary_el = (en.find("a:summary", ns) or en.find("a:content", ns)
-                                or en.find("{*}summary") or en.find("{*}content"))
-                  date_raw = (_text(en.find("a:published", ns)) or _text(en.find("a:updated", ns))
-                              or _text(en.find("{*}published")) or _text(en.find("{*}updated")))
-                  title_el = en.find("a:title", ns) or en.find("{*}title")
-                  stories.append({
-                      "source": source,
-                      "title": clean(_text(title_el)),
-                      "link": (link or "").strip(),
-                      "summary": clean(_text(summary_el)),
-                      "date": parse_date(date_raw),
-                  })
-              return stories
-
-
-          def fetch(url):
-              req = urllib.request.Request(url, headers={"User-Agent": UA})
-              with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-                  return resp.read()
-
-
-          def collect_stories():
-              cutoff = datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)
-              seen, stories = set(), []
-              for source, url in FEEDS:
-                  try:
-                      parsed = parse_feed(fetch(url), source)
-                  except Exception as exc:
-                      print(f"  ! skipped {source}: {exc}", file=sys.stderr)
-                      continue
-                  kept = 0
-                  for s in parsed:
-                      if not s["title"] or not s["link"]:
-                          continue
-                      if s["date"] is not None and s["date"] < cutoff:
-                          continue
-                      key = s["link"].split("?")[0].lower()
-                      if key in seen:
-                          continue
-                      seen.add(key)
-                      stories.append(s)
-                      kept += 1
-                  print(f"  + {source}: {kept} stories", file=sys.stderr)
-              return stories
-
-
-          def match(story, keywords):
-              blob = (story["title"] + " " + story["summary"]).lower()
-              return any(kw in blob for kw in keywords)
-
-
-          def gap_label(story):
-              for label, kws in GAP_TOPICS:
-                  if match(story, kws):
-                      return label
-              return None
-
-
-          def theme_for(story):
-              for name, _intro, kws in THEMES:
-                  if match(story, kws):
-                      return name
-              return FALLBACK_THEME[0]
-
-
-          def score(story):
-              blob = (story["title"] + " " + story["summary"]).lower()
-              hits = sum(blob.count(kw) for _n, _i, kws in THEMES for kw in kws)
-              recency = 0
-              if story["date"] is not None:
-                  recency = max(0, WINDOW_DAYS - (datetime.now(timezone.utc) - story["date"]).days)
-              return hits * 5 + recency
-
-
-          def trim(text, limit=320):
-              if not text:
-                  return ""
-              return (text[: limit - 1].rsplit(" ", 1)[0] + "…") if len(text) > limit else text
-
-
-          def meta_line(s):
-              d = s["date"].strftime("%B %d, %Y") if s["date"] else "Recent"
-              return f"{s['source']} · {d}"
-
-
-          CSS = """
-                  * { margin: 0; padding: 0; box-sizing: border-box; }
-                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                      background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem;
-                      max-width: 900px; margin: 0 auto; }
-                  header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem; }
-                  header h1 { font-size: 2rem; color: #1a1a1a; letter-spacing: -0.5px; }
-                  header h1 span { color: #f5c518; }
-                  .date { color: #666; font-size: 0.95rem; margin-top: 0.25rem; }
-                  .top-watch { background: linear-gradient(135deg, #fffef5, #fff9db);
-                      border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; }
-                  .top-watch h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #b8860b; }
-                  .watch-item { padding: 0.75rem 0; border-bottom: 1px solid #f0e6b8; }
-                  .watch-item:last-child { border-bottom: none; }
-                  .watch-item h3 { font-size: 1rem; margin-bottom: 0.25rem; }
-                  .watch-item h3 a { color: #1a1a1a; text-decoration: none; }
-                  .watch-item h3 a:hover { color: #b8860b; }
-                  .watch-item p { font-size: 0.9rem; color: #444; }
-                  section { margin-bottom: 2.5rem; }
-                  section h2 { font-size: 1.4rem; border-left: 4px solid #f5c518;
-                      padding-left: 0.75rem; margin-bottom: 1.25rem; }
-                  .section-context { font-size: 0.9rem; color: #666; font-style: italic;
-                      margin-top: -0.75rem; margin-bottom: 1.25rem; padding-left: 0.75rem; }
-                  .story { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px;
-                      padding: 1.25rem; margin-bottom: 1rem; transition: box-shadow 0.2s; }
-                  .story:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-                  .story h3 { font-size: 1.05rem; margin-bottom: 0.5rem; }
-                  .story h3 a { color: #1a1a1a; text-decoration: none; }
-                  .story h3 a:hover { color: #b8860b; }
-                  .story .meta { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
-                  .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
-                  .gap-badge { display: inline-block; background: #e8f4fd; color: #1a73e8;
-                      font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px;
-                      margin-left: 0.5rem; vertical-align: middle; text-transform: uppercase;
-                      letter-spacing: 0.5px; }
-                  .note { background: #f7f7f7; border: 1px solid #eee; border-radius: 8px;
-                      padding: 0.75rem 1rem; font-size: 0.85rem; color: #777; margin-bottom: 2rem; }
-                  .archive { margin-bottom: 2rem; }
-                  .archive ul { list-style: none; padding: 0; }
-                  .archive li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
-                  .archive li a { color: #1a1a1a; text-decoration: none; font-size: 0.95rem; }
-                  .archive li a:hover { color: #b8860b; }
-                  footer { text-align: center; color: #999; font-size: 0.8rem;
-                      padding-top: 2rem; border-top: 1px solid #eee; }
-          """.rstrip("\n")
-
-
-          def esc(t):
-              return html.escape(t or "")
-
-
-          def story_card(s, badge=None):
-              badge_html = f' <span class="gap-badge">{esc(badge)}</span>' if badge else ""
-              summary = f'<div class="summary">{esc(trim(s["summary"]))}</div>' if s["summary"] else ""
-              return (
-                  '        <div class="story">\n'
-                  f'            <h3><a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a>{badge_html}</h3>\n'
-                  f'            <div class="meta">{esc(meta_line(s))}</div>\n'
-                  f'            {summary}\n'
-                  '        </div>'
-              )
-
-
-          def find_archives():
-              items = []
-              for path in glob.glob("healthcare-news-*.html"):
-                  m = re.search(r"(\d{4}-\d{2}-\d{2})", path)
-                  if not m:
-                      continue
-                  try:
-                      label = datetime.strptime(m.group(1), "%Y-%m-%d").strftime("%B %d, %Y")
-                  except ValueError:
-                      label = m.group(1)
-                  items.append((m.group(1), path, label))
-              items.sort(reverse=True)
-              return items
-
-
-          def build_html(top3, sections, gaps, archives, week_of, generated_at):
-              p = [
-                  "<!DOCTYPE html>", '<html lang="en">', "<head>", '    <meta charset="UTF-8">',
-                  '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
-                  "    <title>Beyond the Yellow — Healthcare Intelligence</title>",
-                  f"    <style>{CSS}\n    </style>", "</head>", "<body>",
-                  "    <header>",
-                  "        <h1>Beyond the <span>Yellow</span> — Healthcare Intelligence</h1>",
-                  f'        <div class="date">Week of {esc(week_of)} · automated feed edition</div>',
-                  "    </header>",
-                  '    <div class="note">Auto-generated from public healthcare news feeds. '
-                  "Story summaries are the publishers' own; this edition does not include hand-written "
-                  "Zocdoc strategic analysis.</div>",
-              ]
-
-              if top3:
-                  p.append('    <div class="top-watch">')
-                  p.append("        <h2>Top 3 Things to Watch</h2>")
-                  for i, s in enumerate(top3, 1):
-                      p.append('        <div class="watch-item">')
-                      p.append(f'            <h3>{i}. <a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a></h3>')
-                      if s["summary"]:
-                          p.append(f'            <p>{esc(trim(s["summary"], 280))}</p>')
-                      p.append("        </div>")
-                  p.append("    </div>")
-
-              for name, intro, items in sections:
-                  if not items:
-                      continue
-                  p.append("    <section>")
-                  p.append(f"        <h2>{esc(name)}</h2>")
-                  p.append(f'        <div class="section-context">{esc(intro)}</div>')
-                  for s in items:
-                      p.append(story_card(s))
-                  p.append("    </section>")
-
-              p.append('    <section>')
-              p.append("        <h2>What You're Not Tracking</h2>")
-              p.append('        <div class="section-context">Under-tracked themes that surfaced in the feeds this week.</div>')
-              if gaps:
-                  for s in gaps:
-                      p.append(story_card(s, badge=s["_gap"]))
-              else:
-                  p.append('        <div class="note">Quiet in the feeds this week — no notable coverage of the usual under-tracked themes.</div>')
-              p.append("    </section>")
-
-              if archives:
-                  p.append('    <section class="archive">')
-                  p.append("        <h2>Previous Reports</h2>")
-                  p.append("        <ul>")
-                  for _key, path, label in archives:
-                      p.append(f'            <li><a href="{esc(path)}">{esc(label)}</a></li>')
-                  p.append("        </ul>")
-                  p.append("    </section>")
-
-              p.append("    <footer>")
-              p.append(f"        Generated {esc(generated_at)} · Auto-built from public healthcare news feeds · Beyond the Yellow")
-              p.append("    </footer>")
-              p.append("</body>")
-              p.append("</html>")
-              return "\n".join(p) + "\n"
-
-
-          def build(stories):
-              now = datetime.now(timezone.utc)
-              week_of = now.strftime("%B %d, %Y")
-              generated_at = now.strftime("%B %d, %Y %H:%M UTC")
-
-              # Gap items first (and removed from the themed pool), then theme buckets.
-              gaps, rest = [], []
-              for s in stories:
-                  label = gap_label(s)
-                  if label and len(gaps) < MAX_GAP_ITEMS * 3:
-                      s = dict(s, _gap=label)
-                      gaps.append(s)
-                  else:
-                      rest.append(s)
-              gaps.sort(key=score, reverse=True)
-              gaps = gaps[:MAX_GAP_ITEMS]
-
-              buckets = {name: [] for name, _i, _k in THEMES}
-              buckets[FALLBACK_THEME[0]] = []
-              for s in rest:
-                  buckets[theme_for(s)].append(s)
-              for name in buckets:
-                  buckets[name].sort(key=lambda s: (s["date"] or now), reverse=True)
-                  buckets[name] = buckets[name][:MAX_PER_THEME]
-
-              ordered = [(n, i, buckets[n]) for n, i, _k in THEMES]
-              ordered.append((FALLBACK_THEME[0], FALLBACK_THEME[1], buckets[FALLBACK_THEME[0]]))
-
-              top3 = sorted(stories, key=score, reverse=True)[:3]
-              archives = find_archives()
-
-              doc = build_html(top3, ordered, gaps, archives, week_of, generated_at)
-              with open("index.html", "w", encoding="utf-8") as f:
-                  f.write(doc)
-              archive_name = f"healthcare-news-{now.strftime('%Y-%m-%d')}.html"
-              with open(archive_name, "w", encoding="utf-8") as f:
-                  f.write(doc)
-
-              with open("top3.txt", "w", encoding="utf-8") as f:
-                  if top3:
-                      for i, s in enumerate(top3, 1):
-                          f.write(f"{i}. {s['title']} ({s['source']})\n")
-                  else:
-                      f.write("Your weekly healthcare intelligence roundup is ready.\n")
-
-              total = sum(len(items) for _n, _i, items in ordered) + len(gaps)
-              print(f"Wrote index.html, {archive_name}, top3.txt — {total} stories.", file=sys.stderr)
-              return total
-
-
-          SAMPLE = [
-              {"source": "PYMNTS", "title": "Amazon, Perplexity, and OpenAI race for healthcare's first click",
-               "link": "https://example.com/first-click", "summary": "Five AI platforms launched consumer health products. Patients increasingly start with AI before booking care.",
-               "date": datetime.now(timezone.utc) - timedelta(days=1)},
-              {"source": "MedCity News", "title": "Hims & Hers completes $1.15B Eucalyptus acquisition",
-               "link": "https://example.com/hims", "summary": "The deal makes it the largest consumer health platform. Funding and M&A heat up across digital health.",
-               "date": datetime.now(timezone.utc) - timedelta(days=2)},
-              {"source": "CMS", "title": "CMS launches $50/month GLP-1 Medicare bridge program",
-               "link": "https://example.com/glp1", "summary": "Pricing transparency and affordability take center stage as shoppable healthcare goes mainstream.",
-               "date": datetime.now(timezone.utc) - timedelta(days=2)},
-              {"source": "Behavioral Health Business", "title": "Behavioral health funding renaissance continues",
-               "link": "https://example.com/bh", "summary": "Mental health and psychiatry startups raise large rounds as investors pivot to underserved segments.",
-               "date": datetime.now(timezone.utc) - timedelta(days=3)},
-              {"source": "Fortune", "title": "Telehealth hits $81B in the U.S.",
-               "link": "https://example.com/telehealth", "summary": "Virtual care continues rapid growth; mental health dominates telehealth claim volume.",
-               "date": datetime.now(timezone.utc) - timedelta(days=4)},
-              {"source": "Becker's", "title": "Epic MyChart Central launches one-login patient hub",
-               "link": "https://example.com/epic", "summary": "Epic expands its front-door marketplace and partnerships with 1,000+ apps in the Showroom.",
-               "date": datetime.now(timezone.utc) - timedelta(days=2)},
-          ]
-
-
-          def main():
-              if "--selftest" in sys.argv:
-                  n = build(SAMPLE)
-                  print(f"selftest OK: built page with {n} stories")
-                  return
-              print("Fetching healthcare news feeds…", file=sys.stderr)
-              stories = collect_stories()
-              if not stories:
-                  print("WARNING: no stories fetched; writing a minimal page.", file=sys.stderr)
-              build(stories)
-
-
-          if __name__ == "__main__":
-              main()
-          PY
-
-      - name: Commit and publish the page
-        if: steps.guard.outputs.run == 'true'
-        run: |
+  # Builds the Beyond the Yellow healthcare report from public news feeds and
+  # posts it to Slack every Monday at 9am Eastern. Runs entirely on GitHub —
+  # no laptop required, and no API keys or tokens needed. The only secret used
+  # is SLACK_WEBHOOK_URL.
+
+  on:
+    # GitHub cron is UTC and does NOT adjust for daylight saving, so we fire at
+    # both candidate hours and the guard step keeps only the 9am-Eastern run.
+    schedule:
+      - cron: '0 13 * * 1'   # 09:00 America/New_York during EDT (summer)
+      - cron: '0 14 * * 1'   # 09:00 America/New_York during EST (winter)
+    workflow_dispatch: {}     # lets you run it manually from the Actions tab
+
+  permissions:
+    contents: write           # allow the job to commit the regenerated page
+
+  concurrency:
+    group: healthcare-news
+    cancel-in-progress: false
+
+  jobs:
+    generate:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Only continue at 9am Eastern
+          id: guard
+          run: |
+            HOUR="$(TZ=America/New_York date +%H)"
+            if [ "${{ github.event_name }}" = "schedule" ] && [ "$HOUR" != "09" ]; then
+              echo "It's ${HOUR}:00 Eastern, not 09:00 — skipping this run."
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            fi
+
+        - name: Checkout repo
+          if: steps.guard.outputs.run == 'true'
+          uses: actions/checkout@v4
+
+        - name: Set up Python
+          if: steps.guard.outputs.run == 'true'
+          uses: actions/setup-python@v5
+          with:
+            python-version: '3.12'
+
+        - name: Build the report from news feeds
+          if: steps.guard.outputs.run == 'true'
+          run: |
+            python3 - <<'PY'
+            #!/usr/bin/env python3
+            """Beyond the Yellow — weekly healthcare report builder (feed-based).
+
+            No AI, no API keys. Pulls public healthcare-news RSS feeds, keeps the last
+            7 days, sorts stories into the Beyond the Yellow themed sections, flags
+            under-tracked topics ("What You're Not Tracking"), lists prior reports, and
+            writes index.html + a dated archive + top3.txt.
+
+            This is the automated edition: it matches the tailored report's layout and
+            themes, but fills cards with the article's own summary. It deliberately does
+            NOT invent per-story "Strategic angle" analysis — that's human/AI work.
+
+            Uses only the Python standard library. Run with --selftest to render from
+            built-in sample stories without touching the network.
+            """
+
+            import glob
+            import html
+            import re
+            import sys
+            import urllib.request
+            from datetime import datetime, timedelta, timezone
+            from email.utils import parsedate_to_datetime
+            from xml.etree import ElementTree as ET
+
+            # (display name, feed url)
+            FEEDS = [
+                ("Fierce Healthcare", "https://www.fiercehealthcare.com/rss/xml"),
+                ("STAT News", "https://www.statnews.com/feed/"),
+                ("MedCity News", "https://medcitynews.com/feed/"),
+                ("Healthcare Dive", "https://www.healthcaredive.com/feeds/news/"),
+                ("MobiHealthNews", "https://www.mobihealthnews.com/feed"),
+                ("Healthcare IT News", "https://www.healthcareitnews.com/home/feed"),
+                ("Healthcare Finance News", "https://www.healthcarefinancenews.com/home/feed"),
+                ("Behavioral Health Business", "https://bhbusiness.com/feed/"),
+            ]
+
+            # Beyond the Yellow themed sections. A story lands in the FIRST theme it
+            # matches. Each has a static, descriptive intro (no invented statistics).
+            THEMES = [
+                ("AI as Healthcare Interface",
+                 "AI agents, health search, care navigation, and clinical workflow.",
+                 ["artificial intelligence", " ai ", "ai-", "ai,", "ai.", "chatgpt", "copilot",
+                  "openai", "anthropic", "perplexity", "machine learning", "llm", "chatbot",
+                  "agentforce", "care navigation", "clinical workflow", "automation", "algorithm"]),
+                ("Distribution, Partnerships & Front-Door Control",
+                 "Platform partnerships, marketplaces, and who owns the patient's first click.",
+                 ["partnership", "partners with", "collaborat", "integration", "channel",
+                  "front door", "front-door", "mychart", "showroom", "marketplace", "distribution",
+                  "retail", "one medical", "joins forces", "teams up", "strategic"]),
+                ("Pricing, Payment & Affordability",
+                 "Costs, coverage, GLP-1s, price transparency, and shoppable care.",
+                 ["price", "pricing", "payment", "affordab", "cost", "glp-1", "glp1", "copay",
+                  "reimburse", "bundled payment", "transparency", "cash pricing", "out-of-pocket",
+                  "premium", "deductible", "value-based"]),
+                ("Regulatory, Policy & Interoperability",
+                 "CMS, HHS, FDA, data standards, prior auth, and information blocking.",
+                 ["cms", "hhs", "fda", "ftc", "regulation", "policy", "congress", "senate",
+                  "house", "legislation", " bill ", "hipaa", "tefca", "fhir", "interoperab",
+                  "prior auth", "information blocking", "rule", "federal", "medicare", "medicaid"]),
+                ("Consumer Health, Labs & Wearables",
+                 "Wearables, at-home testing, and direct-to-consumer health.",
+                 ["wearable", "oura", "whoop", "fitbit", "apple watch", "garmin", "samsung health",
+                  "lab test", "dtc", "direct-to-consumer", "consumer health", "at-home test",
+                  "biometric", "dexa", "blood test"]),
+                ("Competitive Ecosystem & M&A/Funding",
+                 "Deals, funding rounds, mergers, and competitive moves.",
+                 ["raises", "raised", "funding", "series a", "series b", "series c", "series d",
+                  "acquisition", "acquires", "acquire", "merger", "m&a", "valuation", "ipo",
+                  "venture", "funding round", "invests", "billion", "million", "startup"]),
+            ]
+            FALLBACK_THEME = ("Other Industry News",
+                              "Notable healthcare stories from this week's feeds.", [])
+
+            # Topics Beyond the Yellow tends to UNDER-track — surfaced separately with a
+            # badge so they don't get lost. (label, [keywords])
+            GAP_TOPICS = [
+                ("Behavioral Health", ["behavioral health", "mental health", "psychiatry",
+                                        "substance use", "therapy", "depression", "anxiety"]),
+                ("Telehealth", ["telehealth", "telemedicine", "virtual care", "virtual-first"]),
+                ("Health Equity", ["health equity", "sdoh", "social determinants", "underserved",
+                                   "disparities", "access to care"]),
+                ("Patient Trust & Brand", ["patient trust", "patient experience", "reputation",
+                                           "reviews", "satisfaction"]),
+                ("Workforce", ["burnout", "workforce", "nurse shortage", "staffing",
+                               "clinician shortage", "physician shortage"]),
+                ("Rural Health", ["rural health", "rural hospital", "rural care"]),
+            ]
+
+            WINDOW_DAYS = 7
+            MAX_PER_THEME = 8
+            MAX_GAP_ITEMS = 5
+            HTTP_TIMEOUT = 25
+            UA = "BeyondTheYellow-NewsBot/1.0 (+https://github.com/melissamorgenstern/beyond-the-yellow)"
+
+
+            def clean(text):
+                text = re.sub(r"<[^>]+>", " ", text or "")
+                text = html.unescape(text)
+                return re.sub(r"\s+", " ", text).strip()
+
+
+            def parse_date(value):
+                if not value:
+                    return None
+                value = value.strip()
+                try:
+                    dt = parsedate_to_datetime(value)
+                    if dt is not None:
+                        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    return None
+
+
+            def _text(el):
+                return el.text if el is not None and el.text else ""
+
+
+            def parse_feed(xml_bytes, source):
+                stories = []
+                root = ET.fromstring(xml_bytes)
+                items = root.findall(".//item")
+                if items:
+                    for it in items:
+                        stories.append({
+                            "source": source,
+                            "title": clean(_text(it.find("title"))),
+                            "link": _text(it.find("link")).strip(),
+                            "summary": clean(_text(it.find("description"))),
+                            "date": parse_date(_text(it.find("pubDate"))),
+                        })
+                    return stories
+                ns = {"a": "http://www.w3.org/2005/Atom"}
+                entries = root.findall(".//a:entry", ns) or root.findall(".//{*}entry")
+                for en in entries:
+                    link_el = en.find("a:link", ns) or en.find("{*}link")
+                    link = link_el.get("href") if link_el is not None else ""
+                    summary_el = (en.find("a:summary", ns) or en.find("a:content", ns)
+                                  or en.find("{*}summary") or en.find("{*}content"))
+                    date_raw = (_text(en.find("a:published", ns)) or _text(en.find("a:updated", ns))
+                                or _text(en.find("{*}published")) or _text(en.find("{*}updated")))
+                    title_el = en.find("a:title", ns) or en.find("{*}title")
+                    stories.append({
+                        "source": source,
+                        "title": clean(_text(title_el)),
+                        "link": (link or "").strip(),
+                        "summary": clean(_text(summary_el)),
+                        "date": parse_date(date_raw),
+                    })
+                return stories
+
+
+            def fetch(url):
+                req = urllib.request.Request(url, headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+                    return resp.read()
+
+
+            def collect_stories():
+                cutoff = datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)
+                seen, stories = set(), []
+                for source, url in FEEDS:
+                    try:
+                        parsed = parse_feed(fetch(url), source)
+                    except Exception as exc:
+                        print(f"  ! skipped {source}: {exc}", file=sys.stderr)
+                        continue
+                    kept = 0
+                    for s in parsed:
+                        if not s["title"] or not s["link"]:
+                            continue
+                        if s["date"] is not None and s["date"] < cutoff:
+                            continue
+                        key = s["link"].split("?")[0].lower()
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        stories.append(s)
+                        kept += 1
+                    print(f"  + {source}: {kept} stories", file=sys.stderr)
+                return stories
+
+
+            def match(story, keywords):
+                blob = (story["title"] + " " + story["summary"]).lower()
+                return any(kw in blob for kw in keywords)
+
+
+            def gap_label(story):
+                for label, kws in GAP_TOPICS:
+                    if match(story, kws):
+                        return label
+                return None
+
+
+            def theme_for(story):
+                for name, _intro, kws in THEMES:
+                    if match(story, kws):
+                        return name
+                return FALLBACK_THEME[0]
+
+
+            def score(story):
+                blob = (story["title"] + " " + story["summary"]).lower()
+                hits = sum(blob.count(kw) for _n, _i, kws in THEMES for kw in kws)
+                recency = 0
+                if story["date"] is not None:
+                    recency = max(0, WINDOW_DAYS - (datetime.now(timezone.utc) - story["date"]).days)
+                return hits * 5 + recency
+
+
+            def trim(text, limit=320):
+                if not text:
+                    return ""
+                return (text[: limit - 1].rsplit(" ", 1)[0] + "…") if len(text) > limit else text
+
+
+            def meta_line(s):
+                d = s["date"].strftime("%B %d, %Y") if s["date"] else "Recent"
+                return f"{s['source']} · {d}"
+
+
+            CSS = """
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem;
+                        max-width: 900px; margin: 0 auto; }
+                    header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem; }
+                    header h1 { font-size: 2rem; color: #1a1a1a; letter-spacing: -0.5px; }
+                    header h1 span { color: #f5c518; }
+                    .date { color: #666; font-size: 0.95rem; margin-top: 0.25rem; }
+                    .top-watch { background: linear-gradient(135deg, #fffef5, #fff9db);
+                        border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; }
+                    .top-watch h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #b8860b; }
+                    .watch-item { padding: 0.75rem 0; border-bottom: 1px solid #f0e6b8; }
+                    .watch-item:last-child { border-bottom: none; }
+                    .watch-item h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+                    .watch-item h3 a { color: #1a1a1a; text-decoration: none; }
+                    .watch-item h3 a:hover { color: #b8860b; }
+                    .watch-item p { font-size: 0.9rem; color: #444; }
+                    section { margin-bottom: 2.5rem; }
+                    section h2 { font-size: 1.4rem; border-left: 4px solid #f5c518;
+                        padding-left: 0.75rem; margin-bottom: 1.25rem; }
+                    .section-context { font-size: 0.9rem; color: #666; font-style: italic;
+                        margin-top: -0.75rem; margin-bottom: 1.25rem; padding-left: 0.75rem; }
+                    .story { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px;
+                        padding: 1.25rem; margin-bottom: 1rem; transition: box-shadow 0.2s; }
+                    .story:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+                    .story h3 { font-size: 1.05rem; margin-bottom: 0.5rem; }
+                    .story h3 a { color: #1a1a1a; text-decoration: none; }
+                    .story h3 a:hover { color: #b8860b; }
+                    .story .meta { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+                    .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
+                    .gap-badge { display: inline-block; background: #e8f4fd; color: #1a73e8;
+                        font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px;
+                        margin-left: 0.5rem; vertical-align: middle; text-transform: uppercase;
+                        letter-spacing: 0.5px; }
+                    .note { background: #f7f7f7; border: 1px solid #eee; border-radius: 8px;
+                        padding: 0.75rem 1rem; font-size: 0.85rem; color: #777; margin-bottom: 2rem; }
+                    .archive { margin-bottom: 2rem; }
+                    .archive ul { list-style: none; padding: 0; }
+                    .archive li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+                    .archive li a { color: #1a1a1a; text-decoration: none; font-size: 0.95rem; }
+                    .archive li a:hover { color: #b8860b; }
+                    footer { text-align: center; color: #999; font-size: 0.8rem;
+                        padding-top: 2rem; border-top: 1px solid #eee; }
+            """.rstrip("\n")
+
+
+            def esc(t):
+                return html.escape(t or "")
+
+
+            def story_card(s, badge=None):
+                badge_html = f' <span class="gap-badge">{esc(badge)}</span>' if badge else ""
+                summary = f'<div class="summary">{esc(trim(s["summary"]))}</div>' if s["summary"] else ""
+                return (
+                    '        <div class="story">\n'
+                    f'            <h3><a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a>{badge_html}</h3>\n'
+                    f'            <div class="meta">{esc(meta_line(s))}</div>\n'
+                    f'            {summary}\n'
+                    '        </div>'
+                )
+
+
+            def find_archives():
+                items = []
+                for path in glob.glob("healthcare-news-*.html"):
+                    m = re.search(r"(\d{4}-\d{2}-\d{2})", path)
+                    if not m:
+                        continue
+                    try:
+                        label = datetime.strptime(m.group(1), "%Y-%m-%d").strftime("%B %d, %Y")
+                    except ValueError:
+                        label = m.group(1)
+                    items.append((m.group(1), path, label))
+                items.sort(reverse=True)
+                return items
+
+
+            def build_html(top3, sections, gaps, archives, week_of, generated_at):
+                p = [
+                    "<!DOCTYPE html>", '<html lang="en">', "<head>", '    <meta charset="UTF-8">',
+                    '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
+                    "    <title>Beyond the Yellow — Healthcare Intelligence</title>",
+                    f"    <style>{CSS}\n    </style>", "</head>", "<body>",
+                    "    <header>",
+                    "        <h1>Beyond the <span>Yellow</span> — Healthcare Intelligence</h1>",
+                    f'        <div class="date">Week of {esc(week_of)} · automated feed edition</div>',
+                    "    </header>",
+                    '    <div class="note">Auto-generated from public healthcare news feeds. '
+                    "Story summaries are the publishers' own; this edition does not include hand-written "
+                    "Zocdoc strategic analysis.</div>",
+                ]
+
+                if top3:
+                    p.append('    <div class="top-watch">')
+                    p.append("        <h2>Top 3 Things to Watch</h2>")
+                    for i, s in enumerate(top3, 1):
+                        p.append('        <div class="watch-item">')
+                        p.append(f'            <h3>{i}. <a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a></h3>')
+                        if s["summary"]:
+                            p.append(f'            <p>{esc(trim(s["summary"], 280))}</p>')
+                        p.append("        </div>")
+                    p.append("    </div>")
+
+                for name, intro, items in sections:
+                    if not items:
+                        continue
+                    p.append("    <section>")
+                    p.append(f"        <h2>{esc(name)}</h2>")
+                    p.append(f'        <div class="section-context">{esc(intro)}</div>')
+                    for s in items:
+                        p.append(story_card(s))
+                    p.append("    </section>")
+
+                p.append('    <section>')
+                p.append("        <h2>What You're Not Tracking</h2>")
+                p.append('        <div class="section-context">Under-tracked themes that surfaced in the feeds this week.</div>')
+                if gaps:
+                    for s in gaps:
+                        p.append(story_card(s, badge=s["_gap"]))
+                else:
+                    p.append('        <div class="note">Quiet in the feeds this week — no notable coverage of the usual under-tracked themes.</div>')
+                p.append("    </section>")
+
+                if archives:
+                    p.append('    <section class="archive">')
+                    p.append("        <h2>Previous Reports</h2>")
+                    p.append("        <ul>")
+                    for _key, path, label in archives:
+                        p.append(f'            <li><a href="{esc(path)}">{esc(label)}</a></li>')
+                    p.append("        </ul>")
+                    p.append("    </section>")
+
+                p.append("    <footer>")
+                p.append(f"        Generated {esc(generated_at)} · Auto-built from public healthcare news feeds · Beyond the Yellow")
+                p.append("    </footer>")
+                p.append("</body>")
+                p.append("</html>")
+                return "\n".join(p) + "\n"
+
+
+            def build(stories):
+                now = datetime.now(timezone.utc)
+                week_of = now.strftime("%B %d, %Y")
+                generated_at = now.strftime("%B %d, %Y %H:%M UTC")
+
+                # Gap items first (and removed from the themed pool), then theme buckets.
+                gaps, rest = [], []
+                for s in stories:
+                    label = gap_label(s)
+                    if label and len(gaps) < MAX_GAP_ITEMS * 3:
+                        s = dict(s, _gap=label)
+                        gaps.append(s)
+                    else:
+                        rest.append(s)
+                gaps.sort(key=score, reverse=True)
+                gaps = gaps[:MAX_GAP_ITEMS]
+
+                buckets = {name: [] for name, _i, _k in THEMES}
+                buckets[FALLBACK_THEME[0]] = []
+                for s in rest:
+                    buckets[theme_for(s)].append(s)
+                for name in buckets:
+                    buckets[name].sort(key=lambda s: (s["date"] or now), reverse=True)
+                    buckets[name] = buckets[name][:MAX_PER_THEME]
+
+                ordered = [(n, i, buckets[n]) for n, i, _k in THEMES]
+                ordered.append((FALLBACK_THEME[0], FALLBACK_THEME[1], buckets[FALLBACK_THEME[0]]))
+
+                top3 = sorted(stories, key=score, reverse=True)[:3]
+                archives = find_archives()
+
+                doc = build_html(top3, ordered, gaps, archives, week_of, generated_at)
+                with open("index.html", "w", encoding="utf-8") as f:
+                    f.write(doc)
+                archive_name = f"healthcare-news-{now.strftime('%Y-%m-%d')}.html"
+                with open(archive_name, "w", encoding="utf-8") as f:
+                    f.write(doc)
+
+                with open("top3.txt", "w", encoding="utf-8") as f:
+                    if top3:
+                        for i, s in enumerate(top3, 1):
+                            f.write(f"{i}. {s['title']} ({s['source']})\n")
+                    else:
+                        f.write("Your weekly healthcare intelligence roundup is ready.\n")
+
+                total = sum(len(items) for _n, _i, items in ordered) + len(gaps)
+                print(f"Wrote index.html, {archive_name}, top3.txt — {total} stories.", file=sys.stderr)
+                return total
+
+
+            SAMPLE = [
+                {"source": "PYMNTS", "title": "Amazon, Perplexity, and OpenAI race for healthcare's first click",
+                 "link": "https://example.com/first-click", "summary": "Five AI platforms launched consumer health products. Patients increasingly start with AI before booking care.",
+                 "date": datetime.now(timezone.utc) - timedelta(days=1)},
+                {"source": "MedCity News", "title": "Hims & Hers completes $1.15B Eucalyptus acquisition",
+                 "link": "https://example.com/hims", "summary": "The deal makes it the largest consumer health platform. Funding and M&A heat up across digital health.",
+                 "date": datetime.now(timezone.utc) - timedelta(days=2)},
+                {"source": "CMS", "title": "CMS launches $50/month GLP-1 Medicare bridge program",
+                 "link": "https://example.com/glp1", "summary": "Pricing transparency and affordability take center stage as shoppable healthcare goes mainstream.",
+                 "date": datetime.now(timezone.utc) - timedelta(days=2)},
+                {"source": "Behavioral Health Business", "title": "Behavioral health funding renaissance continues",
+                 "link": "https://example.com/bh", "summary": "Mental health and psychiatry startups raise large rounds as investors pivot to underserved segments.",
+                 "date": datetime.now(timezone.utc) - timedelta(days=3)},
+                {"source": "Fortune", "title": "Telehealth hits $81B in the U.S.",
+                 "link": "https://example.com/telehealth", "summary": "Virtual care continues rapid growth; mental health dominates telehealth claim volume.",
+                 "date": datetime.now(timezone.utc) - timedelta(days=4)},
+                {"source": "Becker's", "title": "Epic MyChart Central launches one-login patient hub",
+                 "link": "https://example.com/epic", "summary": "Epic expands its front-door marketplace and partnerships with 1,000+ apps in the Showroom.",
+                 "date": datetime.now(timezone.utc) - timedelta(days=2)},
+            ]
+
+
+            def main():
+                if "--selftest" in sys.argv:
+                    n = build(SAMPLE)
+                    print(f"selftest OK: built page with {n} stories")
+                    return
+                print("Fetching healthcare news feeds…", file=sys.stderr)
+                stories = collect_stories()
+                if not stories:
+                    print("WARNING: no stories fetched; writing a minimal page.", file=sys.stderr)
+                build(stories)
+
+
+            if __name__ == "__main__":
+                main()
+            PY
+
+        - name: Commit and publish the page
+          if: steps.guard.outputs.run == 'true'
+          run: |
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
