@@ -53,13 +53,14 @@ jobs:
           """Beyond the Yellow — weekly healthcare report builder (feed-based).
 
           No AI, no API keys. Pulls public healthcare-news RSS feeds, keeps the last
-          7 days, sorts stories into the Beyond the Yellow themed sections, flags
+          7 days, sorts stories into the Beyond the Yellow themed sections (plus an
+          expanded set of coverage sections so nothing important slips through), flags
           under-tracked topics ("What You're Not Tracking"), lists prior reports, and
           writes index.html + a dated archive + top3.txt.
 
-          This is the automated edition: it matches the tailored report's layout and
-          themes, but fills cards with the article's own summary. It deliberately does
-          NOT invent per-story "Strategic angle" analysis — that's human/AI work.
+          Layout: a left-hand navigation sidebar links to every section. Each story
+          card shows "The takeaway" — a light why-it-matters line lifted from the
+          article's own summary (NOT invented Zocdoc analysis).
 
           Uses only the Python standard library. Run with --selftest to render from
           built-in sample stories without touching the network.
@@ -86,8 +87,10 @@ jobs:
               ("Behavioral Health Business", "https://bhbusiness.com/feed/"),
           ]
 
-          # Beyond the Yellow themed sections. A story lands in the FIRST theme it
-          # matches. Each has a static, descriptive intro (no invented statistics).
+          # Themed sections. A story lands in the FIRST theme it matches. The first six
+          # are the original Beyond the Yellow themes; the rest broaden coverage so the
+          # report stays comprehensive across the industry. Each has a static,
+          # descriptive intro (no invented statistics). (name, intro, keywords)
           THEMES = [
               ("AI as Healthcare Interface",
                "AI agents, health search, care navigation, and clinical workflow.",
@@ -119,28 +122,62 @@ jobs:
                ["raises", "raised", "funding", "series a", "series b", "series c", "series d",
                 "acquisition", "acquires", "acquire", "merger", "m&a", "valuation", "ipo",
                 "venture", "funding round", "invests", "billion", "million", "startup"]),
+              # --- Broader coverage so the report doesn't miss whole categories ---
+              ("Care Delivery & New Models",
+               "Value-based care, home-based care, primary care, and telehealth models.",
+               ["value-based care", "aco", "accountable care", "hospital-at-home", "hospital at home",
+                "home-based", "home health", "primary care", "telehealth", "telemedicine",
+                "virtual care", "virtual-first", "care model", "risk-bearing", "capitation",
+                "advanced primary care"]),
+              ("Behavioral & Mental Health",
+               "Mental health, psychiatry, substance use, and digital therapeutics.",
+               ["behavioral health", "mental health", "psychiatry", "psychiatric", "substance use",
+                "addiction", "depression", "anxiety", "therapy", "digital therapeutic", "ketamine"]),
+              ("Provider Operations & Revenue Cycle",
+               "Staffing, EHR/admin burden, billing, claims, and throughput.",
+               ["revenue cycle", "rcm", "medical billing", "claims denial", "denials", "staffing",
+                "ehr", "electronic health record", "administrative burden", "scheduling", "throughput",
+                "labor cost", "nurse staffing", "documentation burden"]),
+              ("Employers, Benefits & PBMs",
+               "Self-insured employers, benefits navigation, and pharmacy benefit managers.",
+               ["employer", "self-insured", "self insured", "benefits", "pbm", "pharmacy benefit",
+                "navigation vendor", "tpa", "third-party administrator", "broker", "plan sponsor"]),
+              ("Data, Privacy & Cybersecurity",
+               "Breaches, ransomware, data security, and HIPAA enforcement.",
+               ["cyberattack", "cyber attack", "ransomware", "data breach", "breach", "data security",
+                "cybersecurity", "hipaa violation", "privacy", "hacked", "hack ", "phishing",
+                "leak", "exposed records"]),
+              ("Clinical Evidence & Outcomes",
+               "Studies, trials, quality, safety, and real-world evidence.",
+               ["clinical trial", "study finds", " study ", "research", "outcomes", "efficacy",
+                "peer-reviewed", "jama", "nejm", "real-world evidence", "mortality", "readmission",
+                "quality measure", "patient safety"]),
           ]
           FALLBACK_THEME = ("Other Industry News",
                             "Notable healthcare stories from this week's feeds.", [])
 
           # Topics Beyond the Yellow tends to UNDER-track — surfaced separately with a
-          # badge so they don't get lost. (label, [keywords])
+          # badge so they don't get lost. These intentionally do NOT overlap with the
+          # sections above. (label, [keywords])
           GAP_TOPICS = [
-              ("Behavioral Health", ["behavioral health", "mental health", "psychiatry",
-                                      "substance use", "therapy", "depression", "anxiety"]),
-              ("Telehealth", ["telehealth", "telemedicine", "virtual care", "virtual-first"]),
               ("Health Equity", ["health equity", "sdoh", "social determinants", "underserved",
-                                 "disparities", "access to care"]),
+                                 "disparities", "access to care", "uninsured"]),
               ("Patient Trust & Brand", ["patient trust", "patient experience", "reputation",
-                                         "reviews", "satisfaction"]),
-              ("Workforce", ["burnout", "workforce", "nurse shortage", "staffing",
-                             "clinician shortage", "physician shortage"]),
-              ("Rural Health", ["rural health", "rural hospital", "rural care"]),
+                                         "online reviews", "patient satisfaction", "consumer trust"]),
+              ("Workforce & Burnout", ["burnout", "workforce shortage", "nurse shortage",
+                                       "clinician shortage", "physician shortage", "great resignation"]),
+              ("Rural Health", ["rural health", "rural hospital", "rural care", "critical access"]),
+              ("Women's & Maternal Health", ["maternal", "women's health", "womens health", "fertility",
+                                              "menopause", "obstetric", "maternity"]),
+              ("Aging & Senior Care", ["senior care", "aging", "older adults", "long-term care",
+                                       "nursing home", "geriatric", "elder care"]),
+              ("Global & Public Health", ["public health", "global health", "who ", "world health",
+                                          "pandemic", "outbreak", "cdc"]),
           ]
 
           WINDOW_DAYS = 7
           MAX_PER_THEME = 8
-          MAX_GAP_ITEMS = 5
+          MAX_GAP_ITEMS = 6
           HTTP_TIMEOUT = 25
           UA = "BeyondTheYellow-NewsBot/1.0 (+https://github.com/melissamorgenstern/beyond-the-yellow)"
 
@@ -271,22 +308,53 @@ jobs:
               return (text[: limit - 1].rsplit(" ", 1)[0] + "…") if len(text) > limit else text
 
 
+          def split_takeaway(summary):
+              """Split a summary into (lead sentence, remainder). The lead becomes
+              'The takeaway'; the remainder fills the regular summary line. This keeps
+              the takeaway honest — it's the article's own point, not invented."""
+              summary = (summary or "").strip()
+              if not summary:
+                  return "", ""
+              m = re.search(r"(?<=[.!?])\s+", summary)
+              if m:
+                  return summary[:m.start()].strip(), summary[m.end():].strip()
+              return summary, ""
+
+
           def meta_line(s):
               d = s["date"].strftime("%B %d, %Y") if s["date"] else "Recent"
               return f"{s['source']} · {d}"
 
 
+          def slug(text):
+              return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", text.lower())).strip("-")
+
+
           CSS = """
                   * { margin: 0; padding: 0; box-sizing: border-box; }
                   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                      background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem;
-                      max-width: 900px; margin: 0 auto; }
-                  header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem; }
+                      background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem; }
+                  header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem;
+                      max-width: 1140px; margin-left: auto; margin-right: auto; }
                   header h1 { font-size: 2rem; color: #1a1a1a; letter-spacing: -0.5px; }
                   header h1 span { color: #f5c518; }
                   .date { color: #666; font-size: 0.95rem; margin-top: 0.25rem; }
+                  .layout { display: flex; gap: 2.5rem; max-width: 1140px; margin: 0 auto;
+                      align-items: flex-start; }
+                  nav.sidebar { width: 220px; flex-shrink: 0; position: sticky; top: 1.5rem;
+                      align-self: flex-start; font-size: 0.9rem; }
+                  nav.sidebar .nav-title { text-transform: uppercase; letter-spacing: 1px;
+                      font-size: 0.7rem; color: #999; margin-bottom: 0.75rem; font-weight: 600; }
+                  nav.sidebar ul { list-style: none; padding: 0; border-left: 2px solid #eee; }
+                  nav.sidebar li a { display: block; padding: 0.3rem 0 0.3rem 0.85rem; margin-left: -2px;
+                      color: #555; text-decoration: none; border-left: 2px solid transparent; }
+                  nav.sidebar li a:hover { color: #b8860b; border-left-color: #f5c518; }
+                  main { flex: 1; min-width: 0; max-width: 760px; }
+                  .note { background: #f7f7f7; border: 1px solid #eee; border-radius: 8px;
+                      padding: 0.75rem 1rem; font-size: 0.85rem; color: #777; margin-bottom: 2rem; }
                   .top-watch { background: linear-gradient(135deg, #fffef5, #fff9db);
-                      border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; }
+                      border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem;
+                      scroll-margin-top: 1.5rem; }
                   .top-watch h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #b8860b; }
                   .watch-item { padding: 0.75rem 0; border-bottom: 1px solid #f0e6b8; }
                   .watch-item:last-child { border-bottom: none; }
@@ -294,7 +362,7 @@ jobs:
                   .watch-item h3 a { color: #1a1a1a; text-decoration: none; }
                   .watch-item h3 a:hover { color: #b8860b; }
                   .watch-item p { font-size: 0.9rem; color: #444; }
-                  section { margin-bottom: 2.5rem; }
+                  section { margin-bottom: 2.5rem; scroll-margin-top: 1.5rem; }
                   section h2 { font-size: 1.4rem; border-left: 4px solid #f5c518;
                       padding-left: 0.75rem; margin-bottom: 1.25rem; }
                   .section-context { font-size: 0.9rem; color: #666; font-style: italic;
@@ -307,19 +375,30 @@ jobs:
                   .story h3 a:hover { color: #b8860b; }
                   .story .meta { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
                   .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
+                  .story .takeaway { font-size: 0.85rem; color: #b8860b; font-style: italic;
+                      background: #fffef5; border-radius: 4px; padding: 0.45rem 0.65rem; margin-top: 0.4rem; }
+                  .story .takeaway b { font-style: normal; color: #8a6d0b; }
                   .gap-badge { display: inline-block; background: #e8f4fd; color: #1a73e8;
                       font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px;
                       margin-left: 0.5rem; vertical-align: middle; text-transform: uppercase;
                       letter-spacing: 0.5px; }
-                  .note { background: #f7f7f7; border: 1px solid #eee; border-radius: 8px;
-                      padding: 0.75rem 1rem; font-size: 0.85rem; color: #777; margin-bottom: 2rem; }
                   .archive { margin-bottom: 2rem; }
                   .archive ul { list-style: none; padding: 0; }
                   .archive li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
                   .archive li a { color: #1a1a1a; text-decoration: none; font-size: 0.95rem; }
                   .archive li a:hover { color: #b8860b; }
                   footer { text-align: center; color: #999; font-size: 0.8rem;
-                      padding-top: 2rem; border-top: 1px solid #eee; }
+                      padding-top: 2rem; border-top: 1px solid #eee; max-width: 1140px;
+                      margin: 0 auto; }
+                  @media (max-width: 760px) {
+                      body { padding: 1rem; }
+                      .layout { flex-direction: column; gap: 1.5rem; }
+                      nav.sidebar { position: static; width: auto; border-bottom: 1px solid #eee;
+                          padding-bottom: 1rem; }
+                      nav.sidebar ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; border-left: none; }
+                      nav.sidebar li a { border-left: none; padding-left: 0; }
+                      main { max-width: none; }
+                  }
           """.rstrip("\n")
 
 
@@ -329,14 +408,18 @@ jobs:
 
           def story_card(s, badge=None):
               badge_html = f' <span class="gap-badge">{esc(badge)}</span>' if badge else ""
-              summary = f'<div class="summary">{esc(trim(s["summary"]))}</div>' if s["summary"] else ""
-              return (
-                  '        <div class="story">\n'
-                  f'            <h3><a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a>{badge_html}</h3>\n'
-                  f'            <div class="meta">{esc(meta_line(s))}</div>\n'
-                  f'            {summary}\n'
-                  '        </div>'
-              )
+              takeaway, remainder = split_takeaway(s["summary"])
+              parts = [
+                  '        <div class="story">',
+                  f'            <h3><a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a>{badge_html}</h3>',
+                  f'            <div class="meta">{esc(meta_line(s))}</div>',
+              ]
+              if remainder:
+                  parts.append(f'            <div class="summary">{esc(trim(remainder))}</div>')
+              if takeaway:
+                  parts.append(f'            <div class="takeaway"><b>The takeaway:</b> {esc(trim(takeaway, 240))}</div>')
+              parts.append('        </div>')
+              return "\n".join(parts)
 
 
           def find_archives():
@@ -354,7 +437,27 @@ jobs:
               return items
 
 
+          def build_nav(nav_items):
+              p = ['    <nav class="sidebar">', '        <div class="nav-title">On this page</div>', "        <ul>"]
+              for anchor, label in nav_items:
+                  p.append(f'            <li><a href="#{anchor}">{esc(label)}</a></li>')
+              p.append("        </ul>")
+              p.append("    </nav>")
+              return "\n".join(p)
+
+
           def build_html(top3, sections, gaps, archives, week_of, generated_at):
+              # Work out the nav links (only sections that will actually render).
+              nav_items = []
+              if top3:
+                  nav_items.append(("top3", "Top 3 to Watch"))
+              for name, _intro, items in sections:
+                  if items:
+                      nav_items.append((slug(name), name))
+              nav_items.append(("not-tracking", "What You're Not Tracking"))
+              if archives:
+                  nav_items.append(("previous-reports", "Previous Reports"))
+
               p = [
                   "<!DOCTYPE html>", '<html lang="en">', "<head>", '    <meta charset="UTF-8">',
                   '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
@@ -364,33 +467,37 @@ jobs:
                   "        <h1>Beyond the <span>Yellow</span> — Healthcare Intelligence</h1>",
                   f'        <div class="date">Week of {esc(week_of)} · automated feed edition</div>',
                   "    </header>",
+                  '    <div class="layout">',
+                  build_nav(nav_items),
+                  "    <main>",
                   '    <div class="note">Auto-generated from public healthcare news feeds. '
-                  "Story summaries are the publishers' own; this edition does not include hand-written "
-                  "Zocdoc strategic analysis.</div>",
+                  '"The takeaway" lines are drawn from each article\'s own summary; this edition '
+                  "does not include hand-written Zocdoc strategic analysis.</div>",
               ]
 
               if top3:
-                  p.append('    <div class="top-watch">')
+                  p.append('    <div class="top-watch" id="top3">')
                   p.append("        <h2>Top 3 Things to Watch</h2>")
                   for i, s in enumerate(top3, 1):
                       p.append('        <div class="watch-item">')
                       p.append(f'            <h3>{i}. <a href="{esc(s["link"])}" target="_blank">{esc(s["title"])}</a></h3>')
-                      if s["summary"]:
-                          p.append(f'            <p>{esc(trim(s["summary"], 280))}</p>')
+                      lead, _rest = split_takeaway(s["summary"])
+                      if lead:
+                          p.append(f'            <p>{esc(trim(lead, 280))}</p>')
                       p.append("        </div>")
                   p.append("    </div>")
 
               for name, intro, items in sections:
                   if not items:
                       continue
-                  p.append("    <section>")
+                  p.append(f'    <section id="{slug(name)}">')
                   p.append(f"        <h2>{esc(name)}</h2>")
                   p.append(f'        <div class="section-context">{esc(intro)}</div>')
                   for s in items:
                       p.append(story_card(s))
                   p.append("    </section>")
 
-              p.append('    <section>')
+              p.append('    <section id="not-tracking">')
               p.append("        <h2>What You're Not Tracking</h2>")
               p.append('        <div class="section-context">Under-tracked themes that surfaced in the feeds this week.</div>')
               if gaps:
@@ -401,7 +508,7 @@ jobs:
               p.append("    </section>")
 
               if archives:
-                  p.append('    <section class="archive">')
+                  p.append('    <section class="archive" id="previous-reports">')
                   p.append("        <h2>Previous Reports</h2>")
                   p.append("        <ul>")
                   for _key, path, label in archives:
@@ -409,6 +516,8 @@ jobs:
                   p.append("        </ul>")
                   p.append("    </section>")
 
+              p.append("    </main>")
+              p.append("    </div>")
               p.append("    <footer>")
               p.append(f"        Generated {esc(generated_at)} · Auto-built from public healthcare news feeds · Beyond the Yellow")
               p.append("    </footer>")
@@ -469,22 +578,28 @@ jobs:
 
           SAMPLE = [
               {"source": "PYMNTS", "title": "Amazon, Perplexity, and OpenAI race for healthcare's first click",
-               "link": "https://example.com/first-click", "summary": "Five AI platforms launched consumer health products. Patients increasingly start with AI before booking care.",
+               "link": "https://example.com/first-click", "summary": "Five AI platforms launched consumer health products this week. Patients increasingly start with an AI assistant before booking care, reshaping the front door.",
                "date": datetime.now(timezone.utc) - timedelta(days=1)},
               {"source": "MedCity News", "title": "Hims & Hers completes $1.15B Eucalyptus acquisition",
-               "link": "https://example.com/hims", "summary": "The deal makes it the largest consumer health platform. Funding and M&A heat up across digital health.",
+               "link": "https://example.com/hims", "summary": "The deal makes it the largest consumer health platform. Funding and M&A activity is heating up across digital health.",
                "date": datetime.now(timezone.utc) - timedelta(days=2)},
               {"source": "CMS", "title": "CMS launches $50/month GLP-1 Medicare bridge program",
-               "link": "https://example.com/glp1", "summary": "Pricing transparency and affordability take center stage as shoppable healthcare goes mainstream.",
+               "link": "https://example.com/glp1", "summary": "Pricing transparency and affordability take center stage. Shoppable healthcare is going mainstream as employers demand cost controls.",
                "date": datetime.now(timezone.utc) - timedelta(days=2)},
               {"source": "Behavioral Health Business", "title": "Behavioral health funding renaissance continues",
-               "link": "https://example.com/bh", "summary": "Mental health and psychiatry startups raise large rounds as investors pivot to underserved segments.",
+               "link": "https://example.com/bh", "summary": "Mental health and psychiatry startups raised large rounds this quarter. Investors are pivoting to long-underserved segments.",
                "date": datetime.now(timezone.utc) - timedelta(days=3)},
-              {"source": "Fortune", "title": "Telehealth hits $81B in the U.S.",
-               "link": "https://example.com/telehealth", "summary": "Virtual care continues rapid growth; mental health dominates telehealth claim volume.",
+              {"source": "Healthcare Dive", "title": "Major health system hit by ransomware attack",
+               "link": "https://example.com/cyber", "summary": "A ransomware attack exposed records at a large system. Cybersecurity spending is climbing across providers.",
+               "date": datetime.now(timezone.utc) - timedelta(days=2)},
+              {"source": "Fierce Healthcare", "title": "Hospital-at-home programs expand under value-based care",
+               "link": "https://example.com/h-at-home", "summary": "Hospital-at-home and home health models are scaling. Value-based care arrangements are pushing acute care into the home.",
                "date": datetime.now(timezone.utc) - timedelta(days=4)},
-              {"source": "Becker's", "title": "Epic MyChart Central launches one-login patient hub",
-               "link": "https://example.com/epic", "summary": "Epic expands its front-door marketplace and partnerships with 1,000+ apps in the Showroom.",
+              {"source": "Becker's", "title": "Rural hospitals face closure wave amid staffing shortage",
+               "link": "https://example.com/rural", "summary": "Rural hospital closures accelerated as workforce shortages bite. Access to care in rural communities is shrinking.",
+               "date": datetime.now(timezone.utc) - timedelta(days=3)},
+              {"source": "STAT News", "title": "New study finds AI triage reduces ER readmissions",
+               "link": "https://example.com/study", "summary": "A peer-reviewed clinical trial reported lower readmission rates. Real-world evidence for AI triage is mounting.",
                "date": datetime.now(timezone.utc) - timedelta(days=2)},
           ]
 
