@@ -7,14 +7,28 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem;
-            max-width: 900px; margin: 0 auto; }
-        header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem; }
+            background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem; }
+        header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem;
+            max-width: 1140px; margin-left: auto; margin-right: auto; }
         header h1 { font-size: 2rem; color: #1a1a1a; letter-spacing: -0.5px; }
         header h1 span { color: #f5c518; }
         .date { color: #666; font-size: 0.95rem; margin-top: 0.25rem; }
+        .layout { display: flex; gap: 2.5rem; max-width: 1140px; margin: 0 auto;
+            align-items: flex-start; }
+        nav.sidebar { width: 220px; flex-shrink: 0; position: sticky; top: 1.5rem;
+            align-self: flex-start; font-size: 0.9rem; }
+        nav.sidebar .nav-title { text-transform: uppercase; letter-spacing: 1px;
+            font-size: 0.7rem; color: #999; margin-bottom: 0.75rem; font-weight: 600; }
+        nav.sidebar ul { list-style: none; padding: 0; border-left: 2px solid #eee; }
+        nav.sidebar li a { display: block; padding: 0.3rem 0 0.3rem 0.85rem; margin-left: -2px;
+            color: #555; text-decoration: none; border-left: 2px solid transparent; }
+        nav.sidebar li a:hover { color: #b8860b; border-left-color: #f5c518; }
+        main { flex: 1; min-width: 0; max-width: 760px; }
+        .note { background: #f7f7f7; border: 1px solid #eee; border-radius: 8px;
+            padding: 0.75rem 1rem; font-size: 0.85rem; color: #777; margin-bottom: 2rem; }
         .top-watch { background: linear-gradient(135deg, #fffef5, #fff9db);
-            border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; }
+            border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem;
+            scroll-margin-top: 1.5rem; }
         .top-watch h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #b8860b; }
         .watch-item { padding: 0.75rem 0; border-bottom: 1px solid #f0e6b8; }
         .watch-item:last-child { border-bottom: none; }
@@ -22,7 +36,7 @@
         .watch-item h3 a { color: #1a1a1a; text-decoration: none; }
         .watch-item h3 a:hover { color: #b8860b; }
         .watch-item p { font-size: 0.9rem; color: #444; }
-        section { margin-bottom: 2.5rem; }
+        section { margin-bottom: 2.5rem; scroll-margin-top: 1.5rem; }
         section h2 { font-size: 1.4rem; border-left: 4px solid #f5c518;
             padding-left: 0.75rem; margin-bottom: 1.25rem; }
         .section-context { font-size: 0.9rem; color: #666; font-style: italic;
@@ -35,19 +49,30 @@
         .story h3 a:hover { color: #b8860b; }
         .story .meta { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
         .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
+        .story .takeaway { font-size: 0.85rem; color: #b8860b; font-style: italic;
+            background: #fffef5; border-radius: 4px; padding: 0.45rem 0.65rem; margin-top: 0.4rem; }
+        .story .takeaway b { font-style: normal; color: #8a6d0b; }
         .gap-badge { display: inline-block; background: #e8f4fd; color: #1a73e8;
             font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px;
             margin-left: 0.5rem; vertical-align: middle; text-transform: uppercase;
             letter-spacing: 0.5px; }
-        .note { background: #f7f7f7; border: 1px solid #eee; border-radius: 8px;
-            padding: 0.75rem 1rem; font-size: 0.85rem; color: #777; margin-bottom: 2rem; }
         .archive { margin-bottom: 2rem; }
         .archive ul { list-style: none; padding: 0; }
         .archive li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
         .archive li a { color: #1a1a1a; text-decoration: none; font-size: 0.95rem; }
         .archive li a:hover { color: #b8860b; }
         footer { text-align: center; color: #999; font-size: 0.8rem;
-            padding-top: 2rem; border-top: 1px solid #eee; }
+            padding-top: 2rem; border-top: 1px solid #eee; max-width: 1140px;
+            margin: 0 auto; }
+        @media (max-width: 760px) {
+            body { padding: 1rem; }
+            .layout { flex-direction: column; gap: 1.5rem; }
+            nav.sidebar { position: static; width: auto; border-bottom: 1px solid #eee;
+                padding-bottom: 1rem; }
+            nav.sidebar ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; border-left: none; }
+            nav.sidebar li a { border-left: none; padding-left: 0; }
+            main { max-width: none; }
+        }
     </style>
 </head>
 <body>
@@ -55,256 +80,381 @@
         <h1>Beyond the <span>Yellow</span> — Healthcare Intelligence</h1>
         <div class="date">Week of June 16, 2026 · automated feed edition</div>
     </header>
-    <div class="note">Auto-generated from public healthcare news feeds. Story summaries are the publishers' own; this edition does not include hand-written Zocdoc strategic analysis.</div>
-    <div class="top-watch">
+    <div class="layout">
+    <nav class="sidebar">
+        <div class="nav-title">On this page</div>
+        <ul>
+            <li><a href="#top3">Top 3 to Watch</a></li>
+            <li><a href="#ai-as-healthcare-interface">AI as Healthcare Interface</a></li>
+            <li><a href="#distribution-partnerships-front-door-control">Distribution, Partnerships &amp; Front-Door Control</a></li>
+            <li><a href="#pricing-payment-affordability">Pricing, Payment &amp; Affordability</a></li>
+            <li><a href="#regulatory-policy-interoperability">Regulatory, Policy &amp; Interoperability</a></li>
+            <li><a href="#competitive-ecosystem-m-a-funding">Competitive Ecosystem &amp; M&amp;A/Funding</a></li>
+            <li><a href="#behavioral-mental-health">Behavioral &amp; Mental Health</a></li>
+            <li><a href="#provider-operations-revenue-cycle">Provider Operations &amp; Revenue Cycle</a></li>
+            <li><a href="#employers-benefits-pbms">Employers, Benefits &amp; PBMs</a></li>
+            <li><a href="#clinical-evidence-outcomes">Clinical Evidence &amp; Outcomes</a></li>
+            <li><a href="#other-industry-news">Other Industry News</a></li>
+            <li><a href="#not-tracking">What You&#x27;re Not Tracking</a></li>
+            <li><a href="#previous-reports">Previous Reports</a></li>
+        </ul>
+    </nav>
+    <main>
+    <div class="note">Auto-generated from public healthcare news feeds. "The takeaway" lines are drawn from each article's own summary; this edition does not include hand-written Zocdoc strategic analysis.</div>
+    <div class="top-watch" id="top3">
         <h2>Top 3 Things to Watch</h2>
         <div class="watch-item">
-            <h3>1. <a href="https://bhbusiness.com/2026/06/15/children-and-teen-mental-health-provider-instride-raises-30m/" target="_blank">Children and Teen Mental Health Provider InStride Raises $30M</a></h3>
-            <p>Pediatric behavioral health provider InStride has raised an additional $30 million in fresh capital. The Series C funding round, which was first reported by Fierce Healthcare, was led by Echo Health Ventures and FMZ Venture. According to the news outlet, the new fund raise will…</p>
+            <h3>1. <a href="https://bhbusiness.com/2026/06/15/behavioral-healths-blue-sky-interventional-psychiatry-value-based-care-ai/" target="_blank">Behavioral Health’s Blue Sky: Interventional Psychiatry, Value-Based Care, AI</a></h3>
+            <p>This is an exclusive BHB+ story.</p>
         </div>
         <div class="watch-item">
-            <h3>2. <a href="https://medcitynews.com/2026/06/cms-medicaid-eligibility-leaders/" target="_blank">Healthcare Leader to CMS on New Medicaid Eligibility Requirements: Give States an Extension</a></h3>
-            <p>At AHIP 2026, healthcare leaders raised concerns about CMS’ new Medicaid eligibility requirements, with one urging the agency to give states more time to implement them. The post Healthcare Leader to CMS on New Medicaid Eligibility Requirements: Give States an Extension…</p>
+            <h3>2. <a href="https://bhbusiness.com/2026/06/15/children-and-teen-mental-health-provider-instride-raises-30m/" target="_blank">Children and Teen Mental Health Provider InStride Raises $30M</a></h3>
+            <p>Pediatric behavioral health provider InStride has raised an additional $30 million in fresh capital.</p>
         </div>
         <div class="watch-item">
-            <h3>3. <a href="https://medcitynews.com/2026/06/multicare-cfo-decades-of-cms-underpayment-is-creating-an-unfair-two-tiered-system/" target="_blank">Multicare CFO: Decades of CMS Underpayment is Creating an Unfair Two-Tiered System</a></h3>
-            <p>MultiCare CFO James Lee said decades of government underpayment have pushed U.S. healthcare to a breaking point. He thinks the nation is headed toward a two-tier system — one for patients with commercial coverage, and another for those covered through CMS. The post Multicare…</p>
+            <h3>3. <a href="https://bhbusiness.com/2026/06/11/advantage-behavioral-health-set-to-be-acquired-by-nonprofit-entity/" target="_blank">Advantage Behavioral Health Set to Be Acquired by Nonprofit Entity</a></h3>
+            <p>QCF/I, Inc., a nonprofit that exists to own and operate addiction treatment and mental health facilities, is poised to acquire Laurel Springs, New Jersey-based Advantage Behavioral Health and Wellness.</p>
         </div>
     </div>
-    <section>
+    <section id="ai-as-healthcare-interface">
         <h2>AI as Healthcare Interface</h2>
         <div class="section-context">AI agents, health search, care navigation, and clinical workflow.</div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/16/how-biotech-turned-trial-failure-ai-model-health-tech/?utm_campaign=rss" target="_blank">STAT+: How a biotech turned a trial failure into an AI model</a></h3>
             <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">In this edition of STAT Health Tech: How a biotech startup turned a failed clinical trial into an AI model, and more.</div>
+            <div class="takeaway"><b>The takeaway:</b> In this edition of STAT Health Tech: How a biotech startup turned a failed clinical trial into an AI model, and more.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://www.statnews.com/2026/06/16/biotech-news-arch-launched-neumora-stops-depression-program/?utm_campaign=rss" target="_blank">STAT+: ARCH-launched Neumora stops depression program</a></h3>
+            <div class="meta">STAT News · June 16, 2026</div>
+            <div class="takeaway"><b>The takeaway:</b> A new AI model to improve trial enrollment, importing drugs from Canada, and more biotech news from The Readout</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/16/verge-labs-ai-model-clinical-trials-data-neurology-diseases/?utm_campaign=rss" target="_blank">STAT+: Verge Labs’ new AI model solves patient stratification problems for neurology clinical trials</a></h3>
             <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">As the saying goes, one man’s trash is another man’s treasure. Or as Verge Labs might put it, one company’s failed clinical trial … is that same company’s new AI…</div>
+            <div class="summary">Or as Verge Labs might put it, one company’s failed clinical trial … is that same company’s new AI…</div>
+            <div class="takeaway"><b>The takeaway:</b> As the saying goes, one man’s trash is another man’s treasure.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/healthcare-ai-beyond-the-buzzwords-ambient-generative-and-agentic-explained/" target="_blank">Healthcare AI Beyond the Buzzwords: Ambient, Generative, and Agentic Explained</a></h3>
             <div class="meta">MedCity News · June 16, 2026</div>
-            <div class="summary">[Sponsored] The future of healthcare AI is not simply a technology conversation. It is a trust conversation. The post Healthcare AI Beyond the Buzzwords: Ambient, Generative, and Agentic Explained appeared first on MedCity News .</div>
-        </div>
-        <div class="story">
-            <h3><a href="https://medcitynews.com/2026/06/elevance-healths-3-key-priorities-for-ai/" target="_blank">Elevance Health’s 3 Key Priorities for AI</a></h3>
-            <div class="meta">MedCity News · June 15, 2026</div>
-            <div class="summary">Elevance Health is leveraging AI for simplifying the member experience, improving the provider experience and making sure employees have the right information at the right time. The post Elevance Health’s 3 Key Priorities for AI appeared first on MedCity News .</div>
+            <div class="summary">It is a trust conversation. The post Healthcare AI Beyond the Buzzwords: Ambient, Generative, and Agentic Explained appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> [Sponsored] The future of healthcare AI is not simply a technology conversation.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.healthcaredive.com/news/judge-vacates-cms-aca-enrollment-eligibility-rule/822884/" target="_blank">Judge vacates most of controversial 2025 ACA enrollment, eligibility rule</a></h3>
             <div class="meta">Healthcare Dive · June 15, 2026</div>
-            <div class="summary">Friday’s decision is a victory for insurance advocates. But, given many of the rule’s provisions were codified in the GOP’s “Big Beautiful Bill,” it’s not a panacea for the ACA.</div>
+            <div class="summary">But, given many of the rule’s provisions were codified in the GOP’s “Big Beautiful Bill,” it’s not a panacea for the ACA.</div>
+            <div class="takeaway"><b>The takeaway:</b> Friday’s decision is a victory for insurance advocates.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.healthcaredive.com/spons/how-healthcare-ai-is-closing-the-revenue-gap/822195/" target="_blank">How healthcare AI is closing the revenue gap</a></h3>
             <div class="meta">Healthcare Dive · June 15, 2026</div>
-            <div class="summary">Discover how healthcare organizations are moving from early experimentation to broader AI adoption, connecting clinical improvements to financial impact.</div>
+            <div class="takeaway"><b>The takeaway:</b> Discover how healthcare organizations are moving from early experimentation to broader AI adoption, connecting clinical improvements to financial impact.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/15/ai-children-screen-time-pediatrician-prescription-guidance/?utm_campaign=rss" target="_blank">Opinion: I’m a pediatrician. I want to prescribe the right AI to my patients</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">AI for children requires “randomized controlled trials measuring real developmental outcomes, not engagement metrics,” writes Dua Hassan.</div>
+            <div class="takeaway"><b>The takeaway:</b> AI for children requires “randomized controlled trials measuring real developmental outcomes, not engagement metrics,” writes Dua Hassan.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/in-the-age-of-ai-interoperability-isnt-enough-why-healthcare-needs-shared-understanding-not-just-shared-data/" target="_blank">In the Age of AI, Interoperability Isn’t Enough: Why Healthcare Needs Shared Understanding, Not Just Shared Data</a></h3>
             <div class="meta">MedCity News · June 14, 2026</div>
-            <div class="summary">The industry needs a framework that can translate clinical nuance into a consistent, trusted representation across systems and use cases. The post In the Age of AI, Interoperability Isn’t Enough: Why Healthcare Needs Shared Understanding, Not Just Shared Data appeared first on MedCity News .</div>
+            <div class="summary">The post In the Age of AI, Interoperability Isn’t Enough: Why Healthcare Needs Shared Understanding, Not Just Shared Data appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> The industry needs a framework that can translate clinical nuance into a consistent, trusted representation across systems and use cases.</div>
         </div>
     </section>
-    <section>
+    <section id="distribution-partnerships-front-door-control">
+        <h2>Distribution, Partnerships &amp; Front-Door Control</h2>
+        <div class="section-context">Platform partnerships, marketplaces, and who owns the patient&#x27;s first click.</div>
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/06/15/children-and-teen-mental-health-provider-instride-raises-30m/" target="_blank">Children and Teen Mental Health Provider InStride Raises $30M</a></h3>
+            <div class="meta">Behavioral Health Business · June 15, 2026</div>
+            <div class="summary">The Series C funding round, which was first reported by Fierce Healthcare, was led by Echo Health Ventures and FMZ Venture. According to the news outlet, the new fund raise will go towards market expansion and exploring new payer partnerships. ​This […] The post Children and Teen Mental Health Provider InStride…</div>
+            <div class="takeaway"><b>The takeaway:</b> Pediatric behavioral health provider InStride has raised an additional $30 million in fresh capital.</div>
+        </div>
+    </section>
+    <section id="pricing-payment-affordability">
         <h2>Pricing, Payment &amp; Affordability</h2>
         <div class="section-context">Costs, coverage, GLP-1s, price transparency, and shoppable care.</div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/the-fdas-bayesian-guidance-could-quietly-reshape-clinical-trial-design/" target="_blank">The FDA’s Bayesian Guidance Could Quietly Reshape Clinical Trial Design</a></h3>
             <div class="meta">MedCity News · June 16, 2026</div>
-            <div class="summary">New FDA guidance on the use of Bayesian statistics signals a broader shift in accommodating more flexible clinical trial designs and the complexities of diseases such as certain cancers and rare disorders, which may lead to more efficient trials, lower development costs, and faster innovation. The post The FDA’s…</div>
+            <div class="summary">The post The FDA’s Bayesian Guidance Could Quietly Reshape Clinical Trial Design appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> New FDA guidance on the use of Bayesian statistics signals a broader shift in accommodating more flexible clinical trial designs and the complexities of diseases such as certain cancers and rare disorders, which may lead to more efficient…</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/pharmalot/2026/06/16/medicare-obesity-drugs-germany-pricing-plans/?utm_campaign=rss" target="_blank">STAT+: Pharmalittle: We’re reading about Medicare and obesity drugs, Germany’s pricing plans, and more</a></h3>
             <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">Weight loss drugs will be available through Medicare starting next month, thanks to a program that is supposed to be temporary but may be difficult to end</div>
+            <div class="takeaway"><b>The takeaway:</b> Weight loss drugs will be available through Medicare starting next month, thanks to a program that is supposed to be temporary but may be difficult to end</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/multicare-cfo-decades-of-cms-underpayment-is-creating-an-unfair-two-tiered-system/" target="_blank">Multicare CFO: Decades of CMS Underpayment is Creating an Unfair Two-Tiered System</a></h3>
             <div class="meta">MedCity News · June 15, 2026</div>
-            <div class="summary">MultiCare CFO James Lee said decades of government underpayment have pushed U.S. healthcare to a breaking point. He thinks the nation is headed toward a two-tier system — one for patients with commercial coverage, and another for those covered through CMS. The post Multicare CFO: Decades of CMS Underpayment is…</div>
+            <div class="summary">healthcare to a breaking point. He thinks the nation is headed toward a two-tier system — one for patients with commercial coverage, and another for those covered through CMS. The post Multicare CFO: Decades of CMS Underpayment is Creating an Unfair Two-Tiered System appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> MultiCare CFO James Lee said decades of government underpayment have pushed U.S.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/pharmalot/2026/06/15/colorado-drug-imports-canada/?utm_campaign=rss" target="_blank">STAT+: FDA approves Colorado’s plan to import cheaper drugs from Canada</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">The FDA said it will allow Colorado to import certain prescription drugs from Canada in an effort to bring prices down for residents.</div>
+            <div class="takeaway"><b>The takeaway:</b> The FDA said it will allow Colorado to import certain prescription drugs from Canada in an effort to bring prices down for residents.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/15/medicare-weight-loss-drugs-glp1-bridge-program-may-be-hard-to-end/?utm_campaign=rss" target="_blank">STAT+: Trump’s obesity drug plan creates a temporary Medicare program that may be hard to end</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">After July 1, Medicare will offer GLP-1 weight-loss drugs for $50. It&#x27;s supposed to be temporary, but chances are it won&#x27;t be.</div>
+            <div class="summary">It&#x27;s supposed to be temporary, but chances are it won&#x27;t be.</div>
+            <div class="takeaway"><b>The takeaway:</b> After July 1, Medicare will offer GLP-1 weight-loss drugs for $50.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.healthcaredive.com/news/medicare-drug-price-negotiation-IV-subcutaneous-opdivo-keytruda/822922/" target="_blank">Medicare drug price rule may target under-the-skin cancer immunotherapies</a></h3>
             <div class="meta">Healthcare Dive · June 15, 2026</div>
-            <div class="summary">For 2029, a federal rule proposes closing a &quot;loophole&quot; that protects medicines transitioning from intravenous administration from price protection.</div>
+            <div class="takeaway"><b>The takeaway:</b> For 2029, a federal rule proposes closing a &quot;loophole&quot; that protects medicines transitioning from intravenous administration from price protection.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/healthcare-affordability/" target="_blank">Why One in Four Americans Is Walking Away from Healthcare</a></h3>
             <div class="meta">MedCity News · June 15, 2026</div>
-            <div class="summary">The healthcare affordability crisis in the U.S. has become a trust crisis, with a growing share of Americans walking away from care altogether. Industry leaders say the fix requires something the system has never really done: starting with the patient. The post Why One in Four Americans Is Walking Away from…</div>
+            <div class="summary">has become a trust crisis, with a growing share of Americans walking away from care altogether. Industry leaders say the fix requires something the system has never really done: starting with the patient. The post Why One in Four Americans Is Walking Away from Healthcare appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> The healthcare affordability crisis in the U.S.</div>
         </div>
         <div class="story">
-            <h3><a href="https://www.healthcaredive.com/spons/data-analytics-for-payers-improving-maternal-health-outcomes-while-reducin/822284/" target="_blank">Data analytics for payers: Improving maternal health outcomes while reducing total cost of care</a></h3>
-            <div class="meta">Healthcare Dive · June 15, 2026</div>
-            <div class="summary">How health plans can use analytics to improve maternal care and reduce avoidable utilization</div>
+            <h3><a href="https://medcitynews.com/2026/06/paul-markovichs-4-ideas-to-reduce-healthcare-costs/" target="_blank">Paul Markovich’s 4 Ideas to Reduce Healthcare Costs</a></h3>
+            <div class="meta">MedCity News · June 15, 2026</div>
+            <div class="summary">The post Paul Markovich’s 4 Ideas to Reduce Healthcare Costs appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Paul Markovich, president and CEO of Ascendiun, shared his ideas for bringing down healthcare costs, including digital health records and changing how healthcare is paid for.</div>
         </div>
     </section>
-    <section>
+    <section id="regulatory-policy-interoperability">
         <h2>Regulatory, Policy &amp; Interoperability</h2>
         <div class="section-context">CMS, HHS, FDA, data standards, prior auth, and information blocking.</div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/16/health-news-how-supplement-use-changed-over-decades/?utm_campaign=rss" target="_blank">How supplement use changed over decades</a></h3>
             <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">Medicare-funded weight loss, Utah&#x27;s lower drunk driving limit, and more health news from Morning Rounds</div>
-        </div>
-        <div class="story">
-            <h3><a href="https://www.statnews.com/2026/06/16/aspr-pandemic-all-hazard-preparedness-act-reauthorization/?utm_campaign=rss" target="_blank">Opinion: Congress must reauthorize the Pandemic and All-Hazards Preparedness Act</a></h3>
-            <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">America’s next health emergency won’t wait for Washington, write W. Craig Vanderwagen and Jennifer B. Alton.</div>
+            <div class="takeaway"><b>The takeaway:</b> Medicare-funded weight loss, Utah&#x27;s lower drunk driving limit, and more health news from Morning Rounds</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/dont-leave-healthcares-greatest-asset-behind-on-the-road-to-interoperability/" target="_blank">Don’t Leave Healthcare’s Greatest Asset Behind on the Road to Interoperability</a></h3>
             <div class="meta">MedCity News · June 15, 2026</div>
-            <div class="summary">In the push toward a more seamless, digitally enabled future, it’s important we understand exactly how this rush to interoperability may actually harm patients, instead of helping, and what we can do to make sure they keep pace. The post Don’t Leave Healthcare’s Greatest Asset Behind on the Road to Interoperability…</div>
+            <div class="summary">The post Don’t Leave Healthcare’s Greatest Asset Behind on the Road to Interoperability appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> In the push toward a more seamless, digitally enabled future, it’s important we understand exactly how this rush to interoperability may actually harm patients, instead of helping, and what we can do to make sure they keep pace.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/the-fda-opened-the-door-for-rare-disease-patients-heres-what-it-takes-to-walk-through-it/" target="_blank">The FDA Opened the Door For Rare Disease Patients — Here’s What It Takes to Walk Through It</a></h3>
             <div class="meta">MedCity News · June 15, 2026</div>
-            <div class="summary">The Plausible Mechanism Framework is a breakthrough. Turning it into treatments that reach families will take five things the framework doesn’t provide. The post The FDA Opened the Door For Rare Disease Patients — Here’s What It Takes to Walk Through It appeared first on MedCity News .</div>
-        </div>
-        <div class="story">
-            <h3><a href="https://www.statnews.com/2026/06/15/health-news-cambridge-recombinant-dna-anniversary/?utm_campaign=rss" target="_blank">STAT+: Where ‘democracy met science,’ 50 years ago</a></h3>
-            <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">State Medicaid crackdowns strain home care, WHO leader on Ebola outbreak, and more health news</div>
+            <div class="summary">Turning it into treatments that reach families will take five things the framework doesn’t provide. The post The FDA Opened the Door For Rare Disease Patients — Here’s What It Takes to Walk Through It appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> The Plausible Mechanism Framework is a breakthrough.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/15/medicaid-caregivers-state-pay-people-with-disabilities/?utm_campaign=rss" target="_blank">As states follow Trump’s Medicaid fraud playbook, people with disabilities struggle to find care</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">Medicaid cuts and fraud crackdown trickle down to states, threatening people with disabilities.</div>
+            <div class="takeaway"><b>The takeaway:</b> Medicaid cuts and fraud crackdown trickle down to states, threatening people with disabilities.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/15/jesse-gabriel-ultra-processed-food-california-laws-national-impact/?utm_campaign=rss" target="_blank">STAT+: One California politician’s unexpected crusade against ultra-processed food</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">Jesse Gabriel &quot;has passed more food policy in three years than most legislators enact in their entire careers,&quot; says one supporter.</div>
+            <div class="takeaway"><b>The takeaway:</b> Jesse Gabriel &quot;has passed more food policy in three years than most legislators enact in their entire careers,&quot; says one supporter.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://medcitynews.com/2026/06/rocket-pharmaceuticals-rare-disease-priority-review-voucher-prv-rckt/" target="_blank">Rocket Pharma Reaps $180M From Sale of FDA Drug Review Fast Pass</a></h3>
+            <div class="meta">MedCity News · June 14, 2026</div>
+            <div class="summary">The non-dilutive capital from the voucher’s sale will support a pipeline that includes a gene therapy in pivotal clinical testing for the rare genetic disorder Danon disease. The post Rocket Pharma Reaps $180M From Sale of FDA Drug Review Fast Pass appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Rocket Pharmaceuticals received the rare pediatric disease priority review voucher with the accelerated FDA approval for Kresladi in March.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/oig-prior-authorization-medicare-advantage/" target="_blank">OIG: 3 Largest MA Insurers Deny Prior Auth Requests at High Rates for Long-Term Acute Care, Inpatient Rehab</a></h3>
             <div class="meta">MedCity News · June 12, 2026</div>
-            <div class="summary">An OIG report found that the three largest Medicare Advantage insurers denied prior authorization requests for long-term acute care and inpatient rehabilitation at higher rates than other MA plans in 2024. The post OIG: 3 Largest MA Insurers Deny Prior Auth Requests at High Rates for Long-Term Acute Care, Inpatient…</div>
+            <div class="summary">The post OIG: 3 Largest MA Insurers Deny Prior Auth Requests at High Rates for Long-Term Acute Care, Inpatient Rehab appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> An OIG report found that the three largest Medicare Advantage insurers denied prior authorization requests for long-term acute care and inpatient rehabilitation at higher rates than other MA plans in 2024.</div>
         </div>
-    </section>
-    <section>
-        <h2>Consumer Health, Labs &amp; Wearables</h2>
-        <div class="section-context">Wearables, at-home testing, and direct-to-consumer health.</div>
         <div class="story">
-            <h3><a href="https://medcitynews.com/2026/06/eli-lilly-myelofibrosis-typeii-jak2-inhibitor-ajax-blood-cancer-hematology-eha-lly/" target="_blank">Lilly’s Newly Acquired Drug Shows Promise as Next-Gen Blood Cancer Med</a></h3>
-            <div class="meta">MedCity News · June 15, 2026</div>
-            <div class="summary">Eli Lilly presented encouraging Phase 1 results for AJ1-11095 at the European Hematology Association (EHA) annual meeting in Stockholm. The drug, a type II JAK2 inhibitor in development for myelofibrosis, came from Lilly’s acquisition of biotech startup Ajax Therapeutics. The post Lilly’s Newly Acquired Drug Shows…</div>
+            <h3><a href="https://medcitynews.com/2026/06/amgen-tavneos-anca-associated-vasculitis-inflammation-fda-dcri-amgn/" target="_blank">Amgen Defends Rare Disease Drug in FDA Crosshairs</a></h3>
+            <div class="meta">MedCity News · June 12, 2026</div>
+            <div class="summary">The FDA wants to withdraw Tavneos’s approval, citing safety risks and alleged manipulation of the drug’s clinical trial data. The post Amgen Defends Rare Disease Drug in FDA Crosshairs appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> FDA concerns about Amgen’s Tavneos were sparked by securities fraud litigation against ChemoCentryx, the company that originally developed the rare disease drug.</div>
         </div>
     </section>
-    <section>
+    <section id="competitive-ecosystem-m-a-funding">
         <h2>Competitive Ecosystem &amp; M&amp;A/Funding</h2>
         <div class="section-context">Deals, funding rounds, mergers, and competitive moves.</div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/16/human-cell-atlas-consortium-meeting-boston-spatial-biology-next-step/?utm_campaign=rss" target="_blank">STAT+: Human Cell Atlas leader’s tie to 10x Genomics raises conflict-of-interest questions</a></h3>
             <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">As the Human Cell Atlas project marks its 10th anniversary, a leader&#x27;s ties to a major single-cell RNA sequencing company raise conflict-of-interest questions.</div>
+            <div class="takeaway"><b>The takeaway:</b> As the Human Cell Atlas project marks its 10th anniversary, a leader&#x27;s ties to a major single-cell RNA sequencing company raise conflict-of-interest questions.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/15/biotech-news-lilly-ajax-acquisition-may-have-been-worth-it/?utm_campaign=rss" target="_blank">STAT+: Lilly’s Ajax acquisition may have been worth it</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">A syphilis drug shortage, Sanofi&#x27;s diabetes drug approval, and more biotech news from The Readout</div>
+            <div class="takeaway"><b>The takeaway:</b> A syphilis drug shortage, Sanofi&#x27;s diabetes drug approval, and more biotech news from The Readout</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/06/12/executive-perspectives-adam-lewis-general-manager-of-talent-and-workforce-management-viventium/" target="_blank">Executive Perspectives: Adam Lewis, General Manager of Talent and Workforce Management, Viventium</a></h3>
+            <div class="meta">Behavioral Health Business · June 12, 2026</div>
+            <div class="summary">With the powered-up Viventium delivering new operational advantages, growing ABA organizations are gaining benefits in payroll, hiring, scheduling and more. Joining us on the new […] The post Executive Perspectives: Adam Lewis, General Manager of Talent and Workforce Management, Viventium appeared first on Behavioral…</div>
+            <div class="takeaway"><b>The takeaway:</b> Executive Perspectives: Adam Lewis, General Manager of Talent and Workforce Management, Viventium In February of 2026, Viventium acquired Apploi to create a nationally scaled, health care-exclusive human capital management platform.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/stop-presenting-at-health-tech-buyers-let-them-drive/" target="_blank">Stop Presenting at Health-Tech Buyers — Let Them Drive</a></h3>
             <div class="meta">MedCity News · June 12, 2026</div>
-            <div class="summary">Winning in health-tech is about giving buyers enough operational clarity, early enough, that they can say yes with confidence rather than saying yes because the alternative is another six months of the same evaluation cycle. The post Stop Presenting at Health-Tech Buyers — Let Them Drive appeared first on MedCity…</div>
+            <div class="summary">The post Stop Presenting at Health-Tech Buyers — Let Them Drive appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Winning in health-tech is about giving buyers enough operational clarity, early enough, that they can say yes with confidence rather than saying yes because the alternative is another six months of the same evaluation cycle.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/06/11/advantage-behavioral-health-set-to-be-acquired-by-nonprofit-entity/" target="_blank">Advantage Behavioral Health Set to Be Acquired by Nonprofit Entity</a></h3>
+            <div class="meta">Behavioral Health Business · June 11, 2026</div>
+            <div class="summary">Lawrenceville, Georgia-based QCF intends to finance the deal through a New Jersey Economic Development Authority (NJEDA) conduit bond. Publicly available documents say the bond financing is […] The post Advantage Behavioral Health Set to Be Acquired by Nonprofit Entity appeared first on Behavioral Health Business .</div>
+            <div class="takeaway"><b>The takeaway:</b> QCF/I, Inc., a nonprofit that exists to own and operate addiction treatment and mental health facilities, is poised to acquire Laurel Springs, New Jersey-based Advantage Behavioral Health and Wellness.</div>
         </div>
     </section>
-    <section>
-        <h2>Other Industry News</h2>
-        <div class="section-context">Notable healthcare stories from this week&#x27;s feeds.</div>
+    <section id="behavioral-mental-health">
+        <h2>Behavioral &amp; Mental Health</h2>
+        <div class="section-context">Mental health, psychiatry, substance use, and digital therapeutics.</div>
         <div class="story">
-            <h3><a href="https://medcitynews.com/2026/06/world-cup-soccer-pathogens-verily-healthcare-disease/" target="_blank">What’s Flowing Beneath the World Cup: How Verily’s Wastewater Monitoring Could Catch the Next Outbreak</a></h3>
-            <div class="meta">MedCity News · June 16, 2026</div>
-            <div class="summary">Verily is testing wastewater across World Cup host cities for pathogens like RSV, measles and norovirus, aiming to spot outbreaks five to seven days before they show up in clinics. The post What’s Flowing Beneath the World Cup: How Verily’s Wastewater Monitoring Could Catch the Next Outbreak appeared first on MedCity…</div>
+            <h3><a href="https://bhbusiness.com/2026/06/15/13-seconds-to-connect-to-care-aetnas-new-on-demand-mental-health-service-launches/" target="_blank">13 Seconds to Connect to Care: Aetna’s New On-Demand Mental Health Service Launches</a></h3>
+            <div class="meta">Behavioral Health Business · June 15, 2026</div>
+            <div class="summary">The tool sets out to solve two problems plaguing mental health: that average appointment wait times can range from 2 weeks to 3 months […] The post 13 Seconds to Connect to Care: Aetna’s New On-Demand Mental Health Service Launches appeared first on Behavioral Health Business .</div>
+            <div class="takeaway"><b>The takeaway:</b> Aetna, one of the largest insurance companies in the U.S., has announced a new on-demand mental health service, slated to roll out to members 13 and older on January 1, 2027.</div>
         </div>
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/06/12/aba-centers-of-america-lays-off-staff/" target="_blank">ABA Centers of America Lays Off Staff</a></h3>
+            <div class="meta">Behavioral Health Business · June 12, 2026</div>
+            <div class="summary">Several posts on social media from employees with varied roles at the company said their roles were eliminated over the last few days as part of a restructuring, potentially prompted by budget cuts. The company declined to offer specific details about the […] The post ABA Centers of America Lays Off Staff appeared…</div>
+            <div class="takeaway"><b>The takeaway:</b> ABA Centers of America appears to have rolled out a round of layoffs.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/06/11/what-behavioral-health-providers-prioritize-when-evaluating-new-tech-partners/" target="_blank">What Behavioral Health Providers Prioritize When Evaluating New Tech Partners</a></h3>
+            <div class="meta">Behavioral Health Business · June 11, 2026</div>
+            <div class="summary">But providers aren’t ignoring vendors entirely. They just want targeted communication – and clear ROI right off the bat. That’s according to WTWH Media’s M2 Research project, which surveyed healthcare professionals across several industries about how they […] The post What Behavioral Health Providers Prioritize When…</div>
+            <div class="takeaway"><b>The takeaway:</b> For some behavioral health technology companies, it may seem impossible to get the attention of prospective provider partners.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/06/10/the-2026-aspect-marketing-advertising-awards-are-now-open/" target="_blank">The 2026 Aspect Marketing &amp; Advertising Awards Are Now Open</a></h3>
+            <div class="meta">Behavioral Health Business · June 10, 2026</div>
+            <div class="summary">The Aspect Marketing &amp; Advertising Awards recognize outstanding creativity, innovation, and impact in marketing and advertising campaigns across the healthcare, post-acute care, and senior living sectors. Evaluated by a panel of respected industry experts, the competition […] The post The 2026 Aspect Marketing &amp;…</div>
+            <div class="takeaway"><b>The takeaway:</b> WTWH Healthcare is excited to announce that nominations are now open for this year’s Aspect Marketing &amp; Advertising Awards.</div>
+        </div>
+    </section>
+    <section id="provider-operations-revenue-cycle">
+        <h2>Provider Operations &amp; Revenue Cycle</h2>
+        <div class="section-context">Staffing, EHR/admin burden, billing, claims, and throughput.</div>
+        <div class="story">
+            <h3><a href="https://medcitynews.com/2026/06/what-healthcare-leaders-get-wrong-about-ehr-switching/" target="_blank">What Healthcare Leaders Get Wrong About EHR Switching</a></h3>
+            <div class="meta">MedCity News · June 11, 2026</div>
+            <div class="summary">But taking a life cycle view, considering data migration, workflow configuration, training, downtime, ongoing fees and eventual exit terms, can put an end to your EHR pain. The post What Healthcare Leaders Get Wrong About EHR Switching appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> EHR switching involves risk.</div>
+        </div>
+    </section>
+    <section id="employers-benefits-pbms">
+        <h2>Employers, Benefits &amp; PBMs</h2>
+        <div class="section-context">Self-insured employers, benefits navigation, and pharmacy benefit managers.</div>
         <div class="story">
             <h3><a href="https://www.healthcaredive.com/news/express-scripts-pcma-sue-tennesee-law-breaking-up-pbms-pharmacies/822942/" target="_blank">Express Scripts, PCMA sue to block Tennesee law breaking up PBMs and pharmacies</a></h3>
             <div class="meta">Healthcare Dive · June 16, 2026</div>
-            <div class="summary">Express Scripts and the PBM lobby are following in CVS Caremark’s footsteps in filing complaints challenging the FAIR Rx Act, which was passed earlier this year despite vehement opposition from PBMs.</div>
+            <div class="takeaway"><b>The takeaway:</b> Express Scripts and the PBM lobby are following in CVS Caremark’s footsteps in filing complaints challenging the FAIR Rx Act, which was passed earlier this year despite vehement opposition from PBMs.</div>
+        </div>
+    </section>
+    <section id="clinical-evidence-outcomes">
+        <h2>Clinical Evidence &amp; Outcomes</h2>
+        <div class="section-context">Studies, trials, quality, safety, and real-world evidence.</div>
+        <div class="story">
+            <h3><a href="https://www.statnews.com/pharmalot/2026/06/15/european-clinical-trial-registry-results-analysis/?utm_campaign=rss" target="_blank">STAT+: A key European clinical trial registry lacks complete and timely results, an analysis finds</a></h3>
+            <div class="meta">STAT News · June 15, 2026</div>
+            <div class="takeaway"><b>The takeaway:</b> A new analysis found that results for less than half of the clinical studies registered in a key European database were reported within the required time frame.</div>
         </div>
         <div class="story">
-            <h3><a href="https://www.statnews.com/2026/06/16/us-infant-mortality-rate-all-time-low/?utm_campaign=rss" target="_blank">The U.S. infant mortality rate fell to an all-time low, though it still trails other similar nations</a></h3>
-            <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">Infant mortality in the U.S. dropped to a new all-time low in 2025, according to CDC data, though it still trails other similar nations.</div>
+            <h3><a href="https://www.statnews.com/2026/06/15/covid-vaccination-cardiovascular-protection-jama-study/?utm_campaign=rss" target="_blank">Covid vaccination cut risk of adverse heart events, large study finds</a></h3>
+            <div class="meta">STAT News · June 15, 2026</div>
+            <div class="takeaway"><b>The takeaway:</b> Covid vaccination was also tied to a nearly 24% reduction in all-cause cardiac events in a large study, surprising researchers.</div>
         </div>
+    </section>
+    <section id="other-industry-news">
+        <h2>Other Industry News</h2>
+        <div class="section-context">Notable healthcare stories from this week&#x27;s feeds.</div>
         <div class="story">
             <h3><a href="https://www.healthcaredive.com/news/centene-offers-employee-buyouts-membership-losses/823005/" target="_blank">Centene offers employee buyouts amid membership losses</a></h3>
             <div class="meta">Healthcare Dive · June 16, 2026</div>
-            <div class="summary">Most of Centene’s 61,000 employees will be eligible to apply for voluntary separation. But the program doesn’t amount to a complete overhaul of the company, a spokesperson said.</div>
+            <div class="summary">But the program doesn’t amount to a complete overhaul of the company, a spokesperson said.</div>
+            <div class="takeaway"><b>The takeaway:</b> Most of Centene’s 61,000 employees will be eligible to apply for voluntary separation.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/healthcare-access-depends-on-infrastructure-why-rural-communities-cant-afford-fragmentation/" target="_blank">Healthcare Access Depends on Infrastructure: Why Rural Communities Can’t Afford Fragmentation</a></h3>
             <div class="meta">MedCity News · June 16, 2026</div>
-            <div class="summary">Reframing transportation as infrastructure, not a support service, means holding it to the same standard as any other component of care delivery. That requires these three things. The post Healthcare Access Depends on Infrastructure: Why Rural Communities Can’t Afford Fragmentation appeared first on MedCity News .</div>
+            <div class="summary">That requires these three things. The post Healthcare Access Depends on Infrastructure: Why Rural Communities Can’t Afford Fragmentation appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Reframing transportation as infrastructure, not a support service, means holding it to the same standard as any other component of care delivery.</div>
         </div>
         <div class="story">
             <h3><a href="https://medcitynews.com/2026/06/natural-selection-will-weed-out-the-weak-in-the-race-to-autonomous-healthcare/" target="_blank">Natural Selection Will Weed Out the Weak in the Race to Autonomous Healthcare</a></h3>
             <div class="meta">MedCity News · June 16, 2026</div>
-            <div class="summary">The autonomous healthcare system is about to take shape, and health systems must prepare to evolve alongside it. The post Natural Selection Will Weed Out the Weak in the Race to Autonomous Healthcare appeared first on MedCity News .</div>
+            <div class="summary">The post Natural Selection Will Weed Out the Weak in the Race to Autonomous Healthcare appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> The autonomous healthcare system is about to take shape, and health systems must prepare to evolve alongside it.</div>
         </div>
         <div class="story">
             <h3><a href="https://www.statnews.com/2026/06/16/alzheimers-diagnosis-treatment-infrastructure/?utm_campaign=rss" target="_blank">Opinion: I’m an Alzheimer’s specialist. I still missed it in my own father</a></h3>
             <div class="meta">STAT News · June 16, 2026</div>
-            <div class="summary">“Alzheimer’s is not primarily a disease of old age. It is a decades-long biological process,” writes Elizabeth Bevins.</div>
+            <div class="summary">It is a decades-long biological process,” writes Elizabeth Bevins.</div>
+            <div class="takeaway"><b>The takeaway:</b> “Alzheimer’s is not primarily a disease of old age.</div>
         </div>
         <div class="story">
-            <h3><a href="https://www.statnews.com/pharmalot/2026/06/15/european-clinical-trial-registry-results-analysis/?utm_campaign=rss" target="_blank">STAT+: A key European clinical trial registry lacks complete and timely results, an analysis finds</a></h3>
+            <h3><a href="https://www.statnews.com/pharmalot/2026/06/15/pfizer-emergency-penicillin-program-sanofi-diabetes-drug/?utm_campaign=rss" target="_blank">STAT+: Pharmalittle: We’re reading about Pfizer’s emergency penicillin program, a Sanofi diabetes drug, and more</a></h3>
             <div class="meta">STAT News · June 15, 2026</div>
-            <div class="summary">A new analysis found that results for less than half of the clinical studies registered in a key European database were reported within the required time frame.</div>
+            <div class="takeaway"><b>The takeaway:</b> Pfizer hasn&#x27;t complied with a request to donate emergency penicillin to state health agencies as a backstop to prevent congenital syphilis</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://medcitynews.com/2026/06/where-healthcare-data-systems-fail-and-how-to-build-them-better/" target="_blank">Where Healthcare Data Systems Fail and How to Build Them Better</a></h3>
+            <div class="meta">MedCity News · June 15, 2026</div>
+            <div class="summary">The post Where Healthcare Data Systems Fail and How to Build Them Better appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Once data starts moving across multiple systems, it becomes hard to track unless you’ve been very intentional about it from the start.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://medcitynews.com/2026/06/the-myth-of-insurance-networks/" target="_blank">The Myth of Insurance Networks</a></h3>
+            <div class="meta">MedCity News · June 14, 2026</div>
+            <div class="takeaway"><b>The takeaway:</b> How America’s outdated insurance model is failing at its most important job The post The Myth of Insurance Networks appeared first on MedCity News .</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://medcitynews.com/2026/06/smoking-cessations-quiet-design-failure/" target="_blank">Smoking Cessation’s Quiet Design Failure</a></h3>
+            <div class="meta">MedCity News · June 14, 2026</div>
+            <div class="summary">The post Smoking Cessation’s Quiet Design Failure appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> The gap between how nicotine use has evolved and how cessation treatment has evolved is a meaningful part of why quit rates have plateaued.</div>
         </div>
     </section>
-    <section>
+    <section id="not-tracking">
         <h2>What You're Not Tracking</h2>
         <div class="section-context">Under-tracked themes that surfaced in the feeds this week.</div>
         <div class="story">
-            <h3><a href="https://bhbusiness.com/2026/06/15/children-and-teen-mental-health-provider-instride-raises-30m/" target="_blank">Children and Teen Mental Health Provider InStride Raises $30M</a> <span class="gap-badge">Behavioral Health</span></h3>
+            <h3><a href="https://bhbusiness.com/2026/06/15/behavioral-healths-blue-sky-interventional-psychiatry-value-based-care-ai/" target="_blank">Behavioral Health’s Blue Sky: Interventional Psychiatry, Value-Based Care, AI</a> <span class="gap-badge">Global &amp; Public Health</span></h3>
             <div class="meta">Behavioral Health Business · June 15, 2026</div>
-            <div class="summary">Pediatric behavioral health provider InStride has raised an additional $30 million in fresh capital. The Series C funding round, which was first reported by Fierce Healthcare, was led by Echo Health Ventures and FMZ Venture. According to the news outlet, the new fund raise will go towards market expansion and…</div>
+            <div class="summary">Following the mental health innovation boom sparked by the pandemic in 2020, it may seem as if there are few empty corners left to build from the outside. From the inside, though, providers still see buildable blue sky in value-based care models, interventional psychiatry, integrated care and across emerging […] The…</div>
+            <div class="takeaway"><b>The takeaway:</b> This is an exclusive BHB+ story.</div>
         </div>
         <div class="story">
-            <h3><a href="https://medcitynews.com/2026/06/from-copilots-to-clinical-judgment-the-next-phase-of-ai-in-digital-behavioral-health/" target="_blank">From Copilots to Clinical Judgment: The Next Phase of AI in Digital Behavioral Health</a> <span class="gap-badge">Behavioral Health</span></h3>
-            <div class="meta">MedCity News · June 11, 2026</div>
-            <div class="summary">The next phase of AI in healthcare is about building systems where human clinicians, supervisors, and AI can all contribute, challenge each other, and improve how decisions are made. The post From Copilots to Clinical Judgment: The Next Phase of AI in Digital Behavioral Health appeared first on MedCity News .</div>
-        </div>
-        <div class="story">
-            <h3><a href="https://bhbusiness.com/2026/06/15/behavioral-healths-blue-sky-interventional-psychiatry-value-based-care-ai/" target="_blank">Behavioral Health’s Blue Sky: Interventional Psychiatry, Value-Based Care, AI</a> <span class="gap-badge">Behavioral Health</span></h3>
-            <div class="meta">Behavioral Health Business · June 15, 2026</div>
-            <div class="summary">This is an exclusive BHB+ story. Following the mental health innovation boom sparked by the pandemic in 2020, it may seem as if there are few empty corners left to build from the outside. From the inside, though, providers still see buildable blue sky in value-based care models, interventional psychiatry, integrated…</div>
-        </div>
-        <div class="story">
-            <h3><a href="https://bhbusiness.com/2026/06/10/behavioral-health-orgs-are-adopting-ai-faster-than-they-train-clinicians-on-it/" target="_blank">Behavioral Health Orgs Are Adopting AI Faster Than They Train Clinicians on It</a> <span class="gap-badge">Behavioral Health</span></h3>
+            <h3><a href="https://bhbusiness.com/2026/06/10/behavioral-health-orgs-are-adopting-ai-faster-than-they-train-clinicians-on-it/" target="_blank">Behavioral Health Orgs Are Adopting AI Faster Than They Train Clinicians on It</a> <span class="gap-badge">Global &amp; Public Health</span></h3>
             <div class="meta">Behavioral Health Business · June 10, 2026</div>
-            <div class="summary">This is an exclusive BHB+ story. Behavioral health’s rapid adoption of AI tools has stoked industry fears that the highly advanced technology could eventually replace human therapists. But industry professionals say what’s more of a concern is a widening gap they see between clinicians who are comfortable using AI as…</div>
+            <div class="summary">Behavioral health’s rapid adoption of AI tools has stoked industry fears that the highly advanced technology could eventually replace human therapists. But industry professionals say what’s more of a concern is a widening gap they see between clinicians who are comfortable using AI as it becomes more deeply embedded…</div>
+            <div class="takeaway"><b>The takeaway:</b> This is an exclusive BHB+ story.</div>
         </div>
         <div class="story">
-            <h3><a href="https://medcitynews.com/2026/06/rocket-pharmaceuticals-rare-disease-priority-review-voucher-prv-rckt/" target="_blank">Rocket Pharma Reaps $180M From Sale of FDA Drug Review Fast Pass</a> <span class="gap-badge">Behavioral Health</span></h3>
-            <div class="meta">MedCity News · June 14, 2026</div>
-            <div class="summary">Rocket Pharmaceuticals received the rare pediatric disease priority review voucher with the accelerated FDA approval for Kresladi in March. The non-dilutive capital from the voucher’s sale will support a pipeline that includes a gene therapy in pivotal clinical testing for the rare genetic disorder Danon disease. The…</div>
+            <h3><a href="https://medcitynews.com/2026/06/eli-lilly-myelofibrosis-typeii-jak2-inhibitor-ajax-blood-cancer-hematology-eha-lly/" target="_blank">Lilly’s Newly Acquired Drug Shows Promise as Next-Gen Blood Cancer Med</a> <span class="gap-badge">Aging &amp; Senior Care</span></h3>
+            <div class="meta">MedCity News · June 15, 2026</div>
+            <div class="summary">The drug, a type II JAK2 inhibitor in development for myelofibrosis, came from Lilly’s acquisition of biotech startup Ajax Therapeutics. The post Lilly’s Newly Acquired Drug Shows Promise as Next-Gen Blood Cancer Med appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Eli Lilly presented encouraging Phase 1 results for AJ1-11095 at the European Hematology Association (EHA) annual meeting in Stockholm.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://medcitynews.com/2026/06/elevance-healths-3-key-priorities-for-ai/" target="_blank">Elevance Health’s 3 Key Priorities for AI</a> <span class="gap-badge">Aging &amp; Senior Care</span></h3>
+            <div class="meta">MedCity News · June 15, 2026</div>
+            <div class="summary">The post Elevance Health’s 3 Key Priorities for AI appeared first on MedCity News .</div>
+            <div class="takeaway"><b>The takeaway:</b> Elevance Health is leveraging AI for simplifying the member experience, improving the provider experience and making sure employees have the right information at the right time.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://www.statnews.com/2026/06/16/us-infant-mortality-rate-all-time-low/?utm_campaign=rss" target="_blank">The U.S. infant mortality rate fell to an all-time low, though it still trails other similar nations</a> <span class="gap-badge">Global &amp; Public Health</span></h3>
+            <div class="meta">STAT News · June 16, 2026</div>
+            <div class="summary">dropped to a new all-time low in 2025, according to CDC data, though it still trails other similar nations.</div>
+            <div class="takeaway"><b>The takeaway:</b> Infant mortality in the U.S.</div>
+        </div>
+        <div class="story">
+            <h3><a href="https://www.healthcaredive.com/spons/data-analytics-for-payers-improving-maternal-health-outcomes-while-reducin/822284/" target="_blank">Data analytics for payers: Improving maternal health outcomes while reducing total cost of care</a> <span class="gap-badge">Women&#x27;s &amp; Maternal Health</span></h3>
+            <div class="meta">Healthcare Dive · June 15, 2026</div>
+            <div class="takeaway"><b>The takeaway:</b> How health plans can use analytics to improve maternal care and reduce avoidable utilization</div>
         </div>
     </section>
-    <section class="archive">
+    <section class="archive" id="previous-reports">
         <h2>Previous Reports</h2>
         <ul>
             <li><a href="healthcare-news-2026-06-16.html">June 16, 2026</a></li>
@@ -314,8 +464,10 @@
             <li><a href="healthcare-news-2026-06-15-v2.html">June 15, 2026</a></li>
         </ul>
     </section>
+    </main>
+    </div>
     <footer>
-        Generated June 16, 2026 19:39 UTC · Auto-built from public healthcare news feeds · Beyond the Yellow
+        Generated June 16, 2026 19:53 UTC · Auto-built from public healthcare news feeds · Beyond the Yellow
     </footer>
 </body>
 </html>
