@@ -1,0 +1,96 @@
+name: Weekly Healthcare Intelligence
+
+on:
+  schedule:
+    - cron: '0 13 * * 1'
+    - cron: '0 14 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: healthcare-news
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only continue at 9am Eastern
+        id: guard
+        run: |
+          HOUR="$(TZ=America/New_York date +%H)"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$HOUR" != "09" ]; then
+            echo "It's ${HOUR}:00 Eastern, not 09:00 — skipping this run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repo
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Install Claude Code
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the report
+        if: steps.guard.outputs.run == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude -p "You are running as an automated weekly agent inside GitHub Actions. The current working directory is the checked-out 'beyond-the-yellow' repo. Do the following:
+
+          1. Search the web for healthcare news from ONLY the past 7 days. Verify publication dates — discard anything older.
+             Search across these 4 areas (run 3-4 web searches per area):
+             - Competitor moves (Sesame, Hims/Hers, Talkiatry, Headway, Alma, Cerebral, Teladoc, Amwell, Carbon Health, One Medical, Amazon Health, and new entrants)
+             - Industry trends (AI in healthcare, patient acquisition, digital health, marketplace dynamics)
+             - Regulatory & policy (CMS rules, telehealth policy, price transparency, prior auth reform)
+             - Health system news (mergers, EHR interoperability, workforce, payer-provider disputes)
+
+          2. For each story, note: headline, DIRECT source URL (not a homepage — the specific article), publication date, 2-3 sentence summary, and why it matters for Zocdoc.
+
+          3. Pick the Top 3 Things to Watch — the most impactful stories across all categories.
+
+          4. Read the existing report at ./index.html for the HTML template and styling. Generate a new report with this week's stories using the same Beyond the Yellow branding, and overwrite ./index.html with it.
+
+          5. Save a date-stamped archive copy: ./healthcare-news-\$(date +%Y-%m-%d).html (identical to the new index.html).
+
+          6. Write JUST the Top 3 Things to Watch as plain text (number + headline + one sentence each) to ./top3.txt
+
+          Be thorough — run at least 8 web searches. Only include stories with confirmed dates from the past 7 days. Do NOT run any git commands and do NOT post to Slack — the workflow handles publishing." \
+            --allowedTools "WebSearch,WebFetch,Write,Read,Bash,Edit,Agent"
+
+      - name: Commit and publish the page
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update healthcare intelligence report - $(TZ=America/New_York date +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Post to Slack
+        if: steps.guard.outputs.run == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          PAGES_URL="https://melissamorgenstern.github.io/beyond-the-yellow/"
+          WEEK_OF="$(TZ=America/New_York date '+%B %d, %Y')"
+          if [ -f top3.txt ]; then TOP3="$(head -6 top3.txt)"; else TOP3="Your weekly healthcare intelligence report is ready."; fi
+          MSG=":newspaper: *Beyond the Yellow — Week of ${WEEK_OF}*
+
+          ${TOP3}
+
+          :link: *Full report:* ${PAGES_URL}"
+          PAYLOAD="$(python3 -c "import json,sys; print(json.dumps({'message': sys.stdin.read()}))" <<< "$MSG")"
+          curl -s -X POST "$SLACK_WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD"
+
