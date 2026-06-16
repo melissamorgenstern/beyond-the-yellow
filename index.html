@@ -1,81 +1,471 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Beyond the Yellow — Healthcare Intelligence</title>
-<style>* { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem;
-            max-width: 900px; margin: 0 auto; }
-        header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin-bottom: 2rem; }
-        header h1 { font-size: 2rem; letter-spacing: -0.5px; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beyond the Yellow — Healthcare Intelligence</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #fafafa;
+            color: #1a1a1a;
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        header {
+            border-bottom: 4px solid #f5c518;
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        header h1 {
+            font-size: 2rem;
+            color: #1a1a1a;
+            letter-spacing: -0.5px;
+        }
         header h1 span { color: #f5c518; }
         .date { color: #666; font-size: 0.95rem; margin-top: 0.25rem; }
-        .top-watch { background: linear-gradient(135deg, #fffef5, #fff9db);
-            border: 2px solid #f5c518; border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; }
-        .top-watch h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #b8860b; }
-        .top-watch ol { margin: 0 0 0 1.2rem; }
-        .top-watch li { margin-bottom: 0.6rem; }
-        .top-watch a { color: #1a1a1a; text-decoration: none; font-weight: 600; }
-        .top-watch a:hover { text-decoration: underline; }
-        h2.cat { font-size: 1.2rem; margin: 2rem 0 1rem; padding-bottom: 0.4rem;
-            border-bottom: 2px solid #eee; color: #b8860b; }
-        .card { background: #fff; border: 1px solid #eee; border-radius: 10px;
-            padding: 1rem 1.2rem; margin-bottom: 0.8rem; }
-        .card a.headline { color: #1a1a1a; text-decoration: none; font-weight: 600; font-size: 1.05rem; }
-        .card a.headline:hover { color: #b8860b; }
-        .meta { color: #888; font-size: 0.82rem; margin: 0.2rem 0 0.4rem; }
-        .summary { color: #444; font-size: 0.92rem; }
-        footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #eee;
-            color: #999; font-size: 0.8rem; }</style>
+        .top-watch {
+            background: linear-gradient(135deg, #fffef5, #fff9db);
+            border: 2px solid #f5c518;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+        .top-watch h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #b8860b;
+        }
+        .watch-item {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f0e6b8;
+        }
+        .watch-item:last-child { border-bottom: none; }
+        .watch-item h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+        .watch-item p { font-size: 0.9rem; color: #444; }
+        section { margin-bottom: 2.5rem; }
+        section h2 {
+            font-size: 1.4rem;
+            border-left: 4px solid #f5c518;
+            padding-left: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+        .section-context {
+            font-size: 0.9rem;
+            color: #666;
+            font-style: italic;
+            margin-top: -0.75rem;
+            margin-bottom: 1.25rem;
+            padding-left: 0.75rem;
+        }
+        .story {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: box-shadow 0.2s;
+        }
+        .story:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .story h3 { font-size: 1.05rem; margin-bottom: 0.5rem; }
+        .story h3 a { color: #1a1a1a; text-decoration: none; }
+        .story h3 a:hover { color: #b8860b; }
+        .story .meta {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+        }
+        .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
+        .story .zocdoc-angle {
+            font-size: 0.85rem;
+            color: #b8860b;
+            font-style: italic;
+            background: #fffef5;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+        .gap-badge {
+            display: inline-block;
+            background: #e8f4fd;
+            color: #1a73e8;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .archive { margin-bottom: 2rem; }
+        .archive ul {
+            list-style: none;
+            padding: 0;
+        }
+        .archive li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        .archive li a {
+            color: #1a1a1a;
+            text-decoration: none;
+            font-size: 0.95rem;
+        }
+        .archive li a:hover { color: #b8860b; }
+        footer {
+            text-align: center;
+            color: #999;
+            font-size: 0.8rem;
+            padding-top: 2rem;
+            border-top: 1px solid #eee;
+        }
+    </style>
 </head>
 <body>
-<header>
-<h1>Beyond the <span>Yellow</span> — Healthcare Intelligence</h1>
-<div class="date">Week of June 16, 2026</div>
-</header>
-<div class="top-watch"><h2>⭐ Top 3 Things to Watch</h2><ol>
-<li><a href="https://medcitynews.com/2026/06/cms-medicaid-eligibility-leaders/">Healthcare Leader to CMS on New Medicaid Eligibility Requirements: Give States an Extension</a> <span style="color:#888;font-weight:400;font-size:0.85rem;">(MedCity News)</span></li>
-<li><a href="https://medcitynews.com/2026/06/abridge-clinical-ai/">Abridge Goes Beyond Documentation: 4 Updates</a> <span style="color:#888;font-weight:400;font-size:0.85rem;">(MedCity News)</span></li>
-<li><a href="https://medcitynews.com/2026/06/elevance-healths-3-key-priorities-for-ai/">Elevance Health’s 3 Key Priorities for AI</a> <span style="color:#888;font-weight:400;font-size:0.85rem;">(MedCity News)</span></li>
-</ol></div>
-<h2 class="cat">Competitor moves</h2>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/15/covid-vaccination-cardiovascular-protection-jama-study/?utm_campaign=rss">Covid vaccination cut risk of adverse heart events, large study finds</a><div class="meta">STAT News · Jun 15</div><div class="summary">Covid vaccination was also tied to a nearly 24% reduction in all-cause cardiac events in a large study, surprising researchers.</div></div>
-<h2 class="cat">Regulatory &amp; policy</h2>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/the-fdas-bayesian-guidance-could-quietly-reshape-clinical-trial-design/">The FDA’s Bayesian Guidance Could Quietly Reshape Clinical Trial Design</a><div class="meta">MedCity News · Jun 16</div><div class="summary">New FDA guidance on the use of Bayesian statistics signals a broader shift in accommodating more flexible clinical trial designs and the complexities of diseas…</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/pharmalot/2026/06/16/medicare-obesity-drugs-germany-pricing-plans/?utm_campaign=rss">STAT+: Pharmalittle: We’re reading about Medicare and obesity drugs, Germany’s pricing plans, and more</a><div class="meta">STAT News · Jun 16</div><div class="summary">Weight loss drugs will be available through Medicare starting next month, thanks to a program that is supposed to be temporary but may be difficult to end</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/health-news-how-supplement-use-changed-over-decades/?utm_campaign=rss">How supplement use changed over decades</a><div class="meta">STAT News · Jun 16</div><div class="summary">Medicare-funded weight loss, Utah&#x27;s lower drunk driving limit, and more health news from Morning Rounds</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/aspr-pandemic-all-hazard-preparedness-act-reauthorization/?utm_campaign=rss">Opinion: Congress must reauthorize the Pandemic and All-Hazards Preparedness Act</a><div class="meta">STAT News · Jun 16</div><div class="summary">America’s next health emergency won’t wait for Washington, write W.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/multicare-cfo-decades-of-cms-underpayment-is-creating-an-unfair-two-tiered-system/">Multicare CFO: Decades of CMS Underpayment is Creating an Unfair Two-Tiered System</a><div class="meta">MedCity News · Jun 15</div><div class="summary">MultiCare CFO James Lee said decades of government underpayment have pushed U.S.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/pharmalot/2026/06/15/colorado-drug-imports-canada/?utm_campaign=rss">STAT+: FDA approves Colorado’s plan to import cheaper drugs from Canada</a><div class="meta">STAT News · Jun 15</div><div class="summary">The FDA said it will allow Colorado to import certain prescription drugs from Canada in an effort to bring prices down for residents.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/15/medicare-weight-loss-drugs-glp1-bridge-program-may-be-hard-to-end/?utm_campaign=rss">STAT+: Trump’s obesity drug plan creates a temporary Medicare program that may be hard to end</a><div class="meta">STAT News · Jun 15</div><div class="summary">After July 1, Medicare will offer GLP-1 weight-loss drugs for $50.</div></div>
-<div class="card"><a class="headline" href="https://www.healthcaredive.com/news/medicare-drug-price-negotiation-IV-subcutaneous-opdivo-keytruda/822922/">Medicare drug price rule may target under-the-skin cancer immunotherapies</a><div class="meta">Healthcare Dive · Jun 15</div><div class="summary">For 2029, a federal rule proposes closing a &quot;loophole&quot; that protects medicines transitioning from intravenous administration from price protection.</div></div>
-<h2 class="cat">AI &amp; industry trends</h2>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/how-biotech-turned-trial-failure-ai-model-health-tech/?utm_campaign=rss">STAT+: How a biotech turned a trial failure into an AI model</a><div class="meta">STAT News · Jun 16</div><div class="summary">In this edition of STAT Health Tech: How a biotech startup turned a failed clinical trial into an AI model, and more.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/biotech-news-arch-launched-neumora-stops-depression-program/?utm_campaign=rss">STAT+: ARCH-launched Neumora stops depression program</a><div class="meta">STAT News · Jun 16</div><div class="summary">A new AI model to improve trial enrollment, importing drugs from Canada, and more biotech news from The Readout</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/verge-labs-ai-model-clinical-trials-data-neurology-diseases/?utm_campaign=rss">STAT+: Verge Labs’ new AI model solves patient stratification problems for neurology clinical trials</a><div class="meta">STAT News · Jun 16</div><div class="summary">As the saying goes, one man’s trash is another man’s treasure.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/healthcare-ai-beyond-the-buzzwords-ambient-generative-and-agentic-explained/">Healthcare AI Beyond the Buzzwords: Ambient, Generative, and Agentic Explained</a><div class="meta">MedCity News · Jun 16</div><div class="summary">[Sponsored] The future of healthcare AI is not simply a technology conversation.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/human-cell-atlas-consortium-meeting-boston-spatial-biology-next-step/?utm_campaign=rss">STAT+: Human Cell Atlas leader’s tie to 10x Genomics raises conflict-of-interest questions</a><div class="meta">STAT News · Jun 16</div><div class="summary">As the Human Cell Atlas project marks its 10th anniversary, a leader&#x27;s ties to a major single-cell RNA sequencing company raise conflict-of-interest questions.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/elevance-healths-3-key-priorities-for-ai/">Elevance Health’s 3 Key Priorities for AI</a><div class="meta">MedCity News · Jun 15</div><div class="summary">Elevance Health is leveraging AI for simplifying the member experience, improving the provider experience and making sure employees have the right information …</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/eli-lilly-myelofibrosis-typeii-jak2-inhibitor-ajax-blood-cancer-hematology-eha-lly/">Lilly’s Newly Acquired Drug Shows Promise as Next-Gen Blood Cancer Med</a><div class="meta">MedCity News · Jun 15</div><div class="summary">Eli Lilly presented encouraging Phase 1 results for AJ1-11095 at the European Hematology Association (EHA) annual meeting in Stockholm.</div></div>
-<div class="card"><a class="headline" href="https://www.healthcaredive.com/spons/how-healthcare-ai-is-closing-the-revenue-gap/822195/">How healthcare AI is closing the revenue gap</a><div class="meta">Healthcare Dive · Jun 15</div><div class="summary">Discover how healthcare organizations are moving from early experimentation to broader AI adoption, connecting clinical improvements to financial impact.</div></div>
-<h2 class="cat">Health systems</h2>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/natural-selection-will-weed-out-the-weak-in-the-race-to-autonomous-healthcare/">Natural Selection Will Weed Out the Weak in the Race to Autonomous Healthcare</a><div class="meta">MedCity News · Jun 16</div><div class="summary">The autonomous healthcare system is about to take shape, and health systems must prepare to evolve alongside it.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/dont-leave-healthcares-greatest-asset-behind-on-the-road-to-interoperability/">Don’t Leave Healthcare’s Greatest Asset Behind on the Road to Interoperability</a><div class="meta">MedCity News · Jun 15</div><div class="summary">In the push toward a more seamless, digitally enabled future, it’s important we understand exactly how this rush to interoperability may actually harm patients…</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/15/biotech-news-lilly-ajax-acquisition-may-have-been-worth-it/?utm_campaign=rss">STAT+: Lilly’s Ajax acquisition may have been worth it</a><div class="meta">STAT News · Jun 15</div><div class="summary">A syphilis drug shortage, Sanofi&#x27;s diabetes drug approval, and more biotech news from The Readout</div></div>
-<div class="card"><a class="headline" href="https://www.healthcaredive.com/spons/data-analytics-for-payers-improving-maternal-health-outcomes-while-reducin/822284/">Data analytics for payers: Improving maternal health outcomes while reducing total cost of care</a><div class="meta">Healthcare Dive · Jun 15</div><div class="summary">How health plans can use analytics to improve maternal care and reduce avoidable utilization</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/in-the-age-of-ai-interoperability-isnt-enough-why-healthcare-needs-shared-understanding-not-just-shared-data/">In the Age of AI, Interoperability Isn’t Enough: Why Healthcare Needs Shared Understanding, Not Just Shared Data</a><div class="meta">MedCity News · Jun 14</div><div class="summary">The industry needs a framework that can translate clinical nuance into a consistent, trusted representation across systems and use cases.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/what-healthcare-leaders-get-wrong-about-ehr-switching/">What Healthcare Leaders Get Wrong About EHR Switching</a><div class="meta">MedCity News · Jun 11</div><div class="summary">EHR switching involves risk.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/the-identity-gap-undermining-value-based-care/">The Identity Gap Undermining Value-Based Care</a><div class="meta">MedCity News · Jun 11</div><div class="summary">[Sponsored] A webinar sponsored by Verato and scheduled for June 17 from 1 pm to 2 pm ET will explore how a unified identity strategy — spanning patients, prov…</div></div>
-<h2 class="cat">More headlines</h2>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/world-cup-soccer-pathogens-verily-healthcare-disease/">What’s Flowing Beneath the World Cup: How Verily’s Wastewater Monitoring Could Catch the Next Outbreak</a><div class="meta">MedCity News · Jun 16</div><div class="summary">Verily is testing wastewater across World Cup host cities for pathogens like RSV, measles and norovirus, aiming to spot outbreaks five to seven days before the…</div></div>
-<div class="card"><a class="headline" href="https://www.healthcaredive.com/news/express-scripts-pcma-sue-tennesee-law-breaking-up-pbms-pharmacies/822942/">Express Scripts, PCMA sue to block Tennesee law breaking up PBMs and pharmacies</a><div class="meta">Healthcare Dive · Jun 16</div><div class="summary">Express Scripts and the PBM lobby are following in CVS Caremark’s footsteps in filing complaints challenging the FAIR Rx Act, which was passed earlier this yea…</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/us-infant-mortality-rate-all-time-low/?utm_campaign=rss">The U.S. infant mortality rate fell to an all-time low, though it still trails other similar nations</a><div class="meta">STAT News · Jun 16</div><div class="summary">Infant mortality in the U.S.</div></div>
-<div class="card"><a class="headline" href="https://www.healthcaredive.com/news/centene-offers-employee-buyouts-membership-losses/823005/">Centene offers employee buyouts amid membership losses</a><div class="meta">Healthcare Dive · Jun 16</div><div class="summary">Most of Centene’s 61,000 employees will be eligible to apply for voluntary separation.</div></div>
-<div class="card"><a class="headline" href="https://medcitynews.com/2026/06/healthcare-access-depends-on-infrastructure-why-rural-communities-cant-afford-fragmentation/">Healthcare Access Depends on Infrastructure: Why Rural Communities Can’t Afford Fragmentation</a><div class="meta">MedCity News · Jun 16</div><div class="summary">Reframing transportation as infrastructure, not a support service, means holding it to the same standard as any other component of care delivery.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/2026/06/16/alzheimers-diagnosis-treatment-infrastructure/?utm_campaign=rss">Opinion: I’m an Alzheimer’s specialist. I still missed it in my own father</a><div class="meta">STAT News · Jun 16</div><div class="summary">“Alzheimer’s is not primarily a disease of old age.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/pharmalot/2026/06/15/european-clinical-trial-registry-results-analysis/?utm_campaign=rss">STAT+: A key European clinical trial registry lacks complete and timely results, an analysis finds</a><div class="meta">STAT News · Jun 15</div><div class="summary">A new analysis found that results for less than half of the clinical studies registered in a key European database were reported within the required time frame.</div></div>
-<div class="card"><a class="headline" href="https://www.statnews.com/pharmalot/2026/06/15/pfizer-emergency-penicillin-program-sanofi-diabetes-drug/?utm_campaign=rss">STAT+: Pharmalittle: We’re reading about Pfizer’s emergency penicillin program, a Sanofi diabetes drug, and more</a><div class="meta">STAT News · Jun 15</div><div class="summary">Pfizer hasn&#x27;t complied with a request to donate emergency penicillin to state health agencies as a backstop to prevent congenital syphilis</div></div>
-<footer>Auto-generated from public healthcare news feeds on Jun 16, 2026 19:16 UTC. Beyond the Yellow · Zocdoc.</footer>
-</body></html>
+    <header>
+        <h1>Beyond the <span>Yellow</span> — Healthcare Intelligence</h1>
+        <div class="date">Week of June 9, 2026 | Generated June 15, 2026 | Tailored to #beyondtheyellow</div>
+    </header>
+
+    <div class="top-watch">
+        <h2>Top 3 Things to Watch</h2>
+        <div class="watch-item">
+            <h3>1. Five AI Platforms Launched Consumer Health Products in 3 Months — The Front-Door Race Is On</h3>
+            <p>OpenAI (ChatGPT Health), Microsoft (Copilot Health), Amazon (Health AI for all US users), Perplexity (Perplexity Health), and Anthropic all shipped dedicated consumer health AI products between January and March 2026. 3 in 5 US adults now use AI for health. ~70% of AI health conversations happen outside clinic hours. These platforms are competing to be the first place patients go <em>before</em> booking — whoever owns that first click controls demand. Zocdoc's strategic position as the "action/booking layer" these platforms connect to is either the opportunity of the decade or an existential risk, depending on whether these platforms build or buy their booking infrastructure.</p>
+        </div>
+        <div class="watch-item">
+            <h3>2. Epic Launches Emmie AI + MyChart Central — The EHR Front Door Gets Smarter</h3>
+            <p>Epic embedded 150+ AI features and launched "Ask Emmie" in MyChart for scheduling, billing, and health questions. MyChart Central adds a one-login hub across providers. The Showroom marketplace now lists 1,000+ apps. Every health system on Epic gets AI scheduling for free, reducing the value proposition of external booking platforms. This is the convergence threat BTY has been tracking — Epic is building the self-contained digital front door that makes third-party marketplaces optional for health systems already on their platform.</p>
+        </div>
+        <div class="watch-item">
+            <h3>3. CMS Launches $50/Month GLP-1 Medicare Program — Shoppable Healthcare Goes Mainstream</h3>
+            <p>Starting July 1, Medicare beneficiaries can access GLP-1 medications (Wegovy, Zepbound, Foundayo) for $50/month. Meanwhile, Amazon Pharmacy fulfilled 125K Wegovy shipments in 6 weeks, GoodRx launched oral GLP-1 cash pricing ($149–$299/mo), and the TEAM bundled payment model went live for 741 hospitals. The theme: healthcare is becoming genuinely shoppable at known prices. Every one of these developments validates marketplace economics — patients actively comparing providers, treatments, and prices. The question is who captures that comparison shopping behavior.</p>
+        </div>
+    </div>
+
+    <!-- SECTION 1: AI AS HEALTHCARE INTERFACE (BTY 23%) -->
+    <section>
+        <h2>AI as Healthcare Interface</h2>
+        <div class="section-context">BTY's #1 theme (23%) — AI agents, health search, care navigation, clinical workflow</div>
+
+        <div class="story">
+            <h3><a href="https://www.pymnts.com/news/artificial-intelligence/2026/amazon-perplexity-and-openai-compete-to-own-the-first-click-in-healthcare/" target="_blank">Amazon, Perplexity, and OpenAI Race for Healthcare's "First Click"</a></h3>
+            <div class="meta">PYMNTS · 2026</div>
+            <div class="summary">Five major AI platforms launched dedicated consumer health products within 3 months. 3 in 5 US adults now use AI tools for health purposes; ~70% of AI health conversations occur outside clinic hours; ~1.6–1.9M weekly ChatGPT messages focus on health insurance questions.</div>
+            <div class="zocdoc-angle">Strategic angle: The "first click" in healthcare is migrating from search engines to AI platforms. A marketplace needs to be the booking layer these AI products connect to — or risk being bypassed entirely.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://news.microsoft.com/source/2026/06/02/mayo-clinic-and-microsoft-collaborate-to-develop-a-frontier-ai-model-for-healthcare/" target="_blank">Mayo Clinic and Microsoft Collaborate on Frontier Healthcare AI Model</a></h3>
+            <div class="meta">Microsoft News / FierceHealthcare · June 2, 2026</div>
+            <div class="summary">Mayo Clinic and Microsoft are building a frontier AI model for healthcare, combining Mayo's de-identified clinical data with Microsoft's AI engineering. Mayo will own the model; Microsoft will distribute via Azure Foundry APIs.</div>
+            <div class="zocdoc-angle">Strategic angle: Health systems building their own AI stacks could route patients within their networks, bypassing third-party marketplaces. But Mayo's model is also an API — potential integration partner for AI-powered provider matching.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.fiercehealthcare.com/ai-and-machine-learning/salesforce-partners-healthex-verily-and-vizai-build-out-healthcare-ai" target="_blank">Salesforce Launches Agentforce Health — 6 AI Agents for Healthcare</a></h3>
+            <div class="meta">FierceHealthcare · March 2026 (referral triage available June 2026)</div>
+            <div class="summary">Salesforce unveiled 6 new Agentforce Health AI agents including a Referrals &amp; Assessments Agent that triages referrals, routes to specialists, and books follow-ups. An EHR Read-Write Agent enables bidirectional data exchange with athenahealth. Supports FHIR/TEFCA.</div>
+            <div class="zocdoc-angle">Strategic angle: Salesforce embedding AI referral triage and booking directly into CRM/EHR workflows creates a new automated scheduling channel that could compete with — or integrate into — marketplace booking flows.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.prnewswire.com/news-releases/perplexity-and-bwell-bring-trusted-health-data-to-ai-search-enabling-personalized-health-answers-302718967.html" target="_blank">Perplexity Health Launches with b.well Partnership for Medical Records</a></h3>
+            <div class="meta">PR Newswire · March 19, 2026</div>
+            <div class="summary">Perplexity launched a dedicated consumer health section partnered with b.well Connected Health to let users connect complete health records to AI-powered search. Integrates with Apple Health for biometric data. The same b.well that Google partnered with in late 2025.</div>
+            <div class="zocdoc-angle">Strategic angle: Perplexity is building the "answer layer" before the "booking layer" — a natural integration point (or competitor) for marketplace booking. Another front-door contender to monitor.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://healthtechmagazine.net/article/2026/06/clinical-workflow-automation-ai-inroads-perfcon" target="_blank">AI Clinical Workflow Automation Moves from Pilot to Production</a></h3>
+            <div class="meta">HealthTech Magazine · June 2026</div>
+            <div class="summary">Six AI workflows have moved to production: referral intake, prior authorization, eligibility verification, appointment scheduling, care gap closure, and patient outreach. 75% of healthcare organizations report AI has improved efficiency.</div>
+            <div class="zocdoc-angle">Strategic angle: AI is automating the administrative layer between patient intent and booking. Marketplaces that plug into automated referral/scheduling flows gain distribution; those that can't get bypassed.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.globenewswire.com/news-release/2026/06/09/3308582/0/en/Philips-Future-Health-Index-2026-AI-is-already-saving-clinicians-time-and-delivering-measurable-impact-in-healthcare.html" target="_blank">Philips: AI Already Saving Clinicians Time and Reducing Stress</a></h3>
+            <div class="meta">GlobeNewsWire · June 9, 2026</div>
+            <div class="summary">49% of clinicians report less work-related stress from AI, 65% report greater confidence in decision-making. 39% say AI has identified or prevented potential medical errors at least 3 times in the past 3 months.</div>
+            <div class="zocdoc-angle">Strategic angle: AI as a provider retention tool — reducing burnout expands effective provider supply. More productive providers = more bookable slots for marketplaces.</div>
+        </div>
+    </section>
+
+    <!-- SECTION 2: DISTRIBUTION, PARTNERSHIPS & FRONT-DOOR CONTROL (BTY 20%) -->
+    <section>
+        <h2>Distribution, Partnerships &amp; Front-Door Control</h2>
+        <div class="section-context">BTY's #2 theme (20%) — Amazon, Epic/MyChart, partner channels, syndication</div>
+
+        <div class="story">
+            <h3><a href="https://www.beckershospitalreview.com/healthcare-information-technology/ehrs/inside-epics-mychart-central-a-one-login-hub-for-patients/" target="_blank">Epic MyChart Showroom Expands to 1,000+ Apps; MyChart Central Launches</a></h3>
+            <div class="meta">Becker's Hospital Review · 2026</div>
+            <div class="summary">Epic's Showroom marketplace now lists 1,000+ apps (up 200+ since September 2025). MyChart Central launched as a one-login hub allowing patients to access health records from multiple participating providers.</div>
+            <div class="zocdoc-angle">Strategic angle: Epic is deepening its marketplace play. MyChart Central's one-login vision competes directly with marketplace portals. Being inside Epic's ecosystem — not outside it — is increasingly important.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.aboutamazon.com/news/retail/amazon-health-ai-agent-one-medical" target="_blank">Amazon One Medical Launches Health AI Agent + GLP-1 Program</a></h3>
+            <div class="meta">About Amazon / CNBC / FierceHealthcare · January 2026</div>
+            <div class="summary">Amazon launched an agentic Health AI assistant for One Medical members with seamless handoff to providers via message, video, or in-person. Also launched a GLP-1 management program with Amazon Pharmacy same-day delivery in ~4,500 cities. Fulfilled 125K Wegovy shipments in 6 weeks.</div>
+            <div class="zocdoc-angle">Strategic angle: Amazon is building the most comprehensive healthcare front door: AI triage → booking → pharmacy → labs, all within the Prime ecosystem. This is the convergence threat BTY has been tracking.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://investors.hims.com/news/news-details/2026/Hims--Hers-Completes-Acquisition-of-Eucalyptus-Advancing-its-Position-as-the-Worlds-Largest-Consumer-Health-Platform/default.aspx" target="_blank">Hims &amp; Hers Completes $1.15B Eucalyptus Acquisition — World's Largest Consumer Health Platform</a></h3>
+            <div class="meta">Hims Investor Relations · June 2, 2026</div>
+            <div class="summary">Hims completed its $1.15B acquisition of Eucalyptus ($450M+ ARR). Combined with ZAVA and Livewell acquisitions, H&amp;H now operates in 9 countries. Also launched Labs AI (biomarker analysis) and plans an AI weight-loss companion. Building an AI-agent-per-condition model.</div>
+            <div class="zocdoc-angle">Strategic angle: Hims' full vertical stack (Labs + AI + Rx) bypasses marketplace search entirely. At this global scale, expansion into provider booking and primary care becomes plausible.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://a16z.com/channel-partnerships-in-healthcare-a-founders-playbook/" target="_blank">a16z Publishes Channel Partnerships Playbook for Digital Health</a></h3>
+            <div class="meta">Andreessen Horowitz · 2026</div>
+            <div class="summary">a16z released a founder's playbook for channel partnerships in healthcare, emphasizing product maturity alignment, focused co-sell over broad agreements, and CAC reduction as the top priority in the US market.</div>
+            <div class="zocdoc-angle">Strategic angle: The VC ecosystem is coaching startups to use channel partnerships (like marketplaces) as distribution — validating the syndication strategy and signaling a pipeline of companies seeking marketplace deals.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.fiercehealthcare.com/health-tech/wellspan-health-strikes-strategic-partnership-philips-deploy-co-develop-new-healthcare" target="_blank">WellSpan Health and Philips Strike Strategic Technology Partnership</a></h3>
+            <div class="meta">FierceHealthcare · 2026</div>
+            <div class="summary">WellSpan Health formed a deep strategic partnership with Philips to co-develop new healthcare technology, signaling health systems are moving toward strategic platform partnerships rather than transactional procurement.</div>
+            <div class="zocdoc-angle">Strategic angle: Health systems want strategic partners, not point solutions. Marketplaces offering strategic value beyond referral volume will have an advantage.</div>
+        </div>
+    </section>
+
+    <!-- SECTION 3: PRICING, PAYMENT & AFFORDABILITY (BTY 17%) -->
+    <section>
+        <h2>Pricing, Payment &amp; Affordability</h2>
+        <div class="section-context">BTY's #3 theme (17%) — Bundled payments, direct-to-employer, RCM, Rx pricing</div>
+
+        <div class="story">
+            <h3><a href="https://www.cms.gov/newsroom/press-releases/coming-soon-cms-provide-50-monthly-access-glp-1-medications-medicare-beneficiaries" target="_blank">CMS Launches $50/Month GLP-1 Medicare Bridge Program — Starting July 2026</a></h3>
+            <div class="meta">CMS / NPR · July 1, 2026 launch</div>
+            <div class="summary">Eligible Medicare beneficiaries will access GLP-1 medications (Wegovy, Zepbound, Foundayo) for $50/month from July 2026 through December 2027. Part of the broader BALANCE Model to reduce GLP-1 net prices and cap out-of-pocket costs.</div>
+            <div class="zocdoc-angle">Strategic angle: Massive expansion of GLP-1 access for the Medicare population creates new demand for prescribing/monitoring providers — a booking opportunity. Validates "shoppable healthcare" at known prices.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://medlearn.com/bundled-payments-are-back-and-this-time-hospitals-may-not-be-ready/" target="_blank">Mandatory Medicare Bundled Payment (TEAM Model) Live for 741 Hospitals</a></h3>
+            <div class="meta">MedLearn / AHA · Active since January 1, 2026</div>
+            <div class="summary">CMS finalized the TEAM model — mandatory bundled payments across 188 metro areas covering 25% of Medicare beneficiaries. 741 hospitals take financial risk for 5 surgical episodes including 30-day post-discharge care.</div>
+            <div class="zocdoc-angle">Strategic angle: Bundled payments make surgical care "shoppable" — hospitals compete on total episode cost and quality. Creates marketplace opportunities to surface bundled-price options.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.aha.org/fact-sheets/2026-06-05-fact-sheet-hospital-price-transparency-current-landscape-and-better-path-forward" target="_blank">Hospital Price Transparency Enforcement Steps Up — April 2026 Rules</a></h3>
+            <div class="meta">AHA / CMS · April 1, 2026 enforcement</div>
+            <div class="summary">Updated rules require hospitals to post machine-readable files with actual negotiated rates, self-pay rates, and chargemaster info, plus consumer-friendly displays of 300+ shoppable services. The Health Care PRICE Transparency Act provides additional statutory authority.</div>
+            <div class="zocdoc-angle">Strategic angle: More publicly available pricing data is raw material for marketplace price comparison. The gap between "data available" and "data useful" is where a marketplace adds value.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.fiercehealthcare.com/health-tech/carrum-health-extends-substance-use-disorder-treatment-employers-tackle-workforce" target="_blank">Carrum Health Doubles Covered Lives to 6.7M; Expands into Substance Use Treatment</a></h3>
+            <div class="meta">FierceHealthcare · 2026</div>
+            <div class="summary">Carrum Health doubled covered lives (added 3.6M in 2025). Expanded beyond surgical bundled payments into substance use disorder treatment. Claims up to 45% savings per procedure through direct provider negotiations with 30-day warranty.</div>
+            <div class="zocdoc-angle">Strategic angle: Direct-to-employer bundled platforms are scaling fast. Validates the "shoppable SKU" model BTY has been tracking. Behavioral health expansion shows the model extending beyond surgery.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.pharmacytimes.com/view/goodrx-expands-access-to-oral-glp-1-therapy-with-semaglutide-pill-cash-pricing" target="_blank">GoodRx Expands Oral GLP-1 Cash Pricing</a></h3>
+            <div class="meta">Pharmacy Times · 2026</div>
+            <div class="summary">GoodRx expanded access to oral semaglutide with cash pricing ($149–$299/month), while compounded options go as low as $99/month. The GLP-1 market is becoming a consumer shopping experience with multiple price points.</div>
+            <div class="zocdoc-angle">Strategic angle: GLP-1 pricing competition mirrors the comparison-shopping dynamics that drive marketplace value across healthcare verticals.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.acrisure.com/blog/how-employer-health-plans-evolve-2026" target="_blank">Employer Benefits Innovation: Virtual-First Plans and Network-Less Models</a></h3>
+            <div class="meta">Acrisure / Business Group on Health · 2026</div>
+            <div class="summary">Alternative plan designs gaining traction: copay-based models, virtual-first approaches, primary-care-centered designs, and "network-less" preset benefit plans. Employers embracing customizable, holistic wellness benefits.</div>
+            <div class="zocdoc-angle">Strategic angle: "Network-less" plans create opportunities for marketplaces to serve as the discovery and booking layer for plans without traditional provider directories.</div>
+        </div>
+    </section>
+
+    <!-- SECTION 4: REGULATORY, POLICY & INTEROPERABILITY (BTY 14%) -->
+    <section>
+        <h2>Regulatory, Policy &amp; Interoperability</h2>
+        <div class="section-context">BTY's #4 theme (14%) — ONC, information blocking, TEFCA/FHIR, AI regulation, privacy</div>
+
+        <div class="story">
+            <h3><a href="https://panetta.house.gov/media/press-releases/rep-panetta-reintroduces-bipartisan-legislation-tackle-ghost-networks-increase" target="_blank">REAL Health Providers Act Reintroduced to Crack Down on Ghost Networks</a></h3>
+            <div class="meta">Rep. Panetta / HIT Consultant · May 2026</div>
+            <div class="summary">Bipartisan legislation would require MA plans to update provider directories annually with mandatory attestation. CMS tightened rules: directories must update within 30 days, and a new Special Enrollment Period lets patients switch plans when directory info is wrong.</div>
+            <div class="zocdoc-angle">Strategic angle: Ghost network enforcement directly validates verified, bookable provider data. As payers scramble to clean directories, a marketplace with real-time availability becomes the gold standard.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.regulatoryoversight.com/2026/03/new-york-ag-settles-ghost-network-investigation/" target="_blank">New York AG Settles Ghost Network Investigation</a></h3>
+            <div class="meta">Regulatory Oversight · March 2026</div>
+            <div class="summary">The New York Attorney General settled an investigation into ghost networks in insurer provider directories, reinforcing state-level enforcement of directory accuracy in Zocdoc's home market.</div>
+            <div class="zocdoc-angle">Strategic angle: State AG enforcement in New York creates urgency for payers to partner with platforms maintaining accurate, real-time provider availability data.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://compliancehub.wiki/state-health-ai-legislation-wave-2026/" target="_blank">240+ State AI Health Bills Across 43 States Create Compliance Patchwork</a></h3>
+            <div class="meta">ComplianceHub / Healthcare Brew · 2026</div>
+            <div class="summary">~240 state-level AI bills introduced across 43 states focusing on mental health chatbots, patient disclosure/consent, and payer AI use. Meanwhile, FDA loosened oversight of clinical decision support, creating federal-state tension.</div>
+            <div class="zocdoc-angle">Strategic angle: Any marketplace deploying AI for care navigation or scheduling must navigate this patchwork. Transparency in AI disclosure could become a competitive differentiator.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://rce.sequoiaproject.org/rce-tefca-on-fhir/" target="_blank">TEFCA Hits FHIR Security Milestone; Stage 4 Nears</a></h3>
+            <div class="meta">Sequoia Project / Mindbowser · 2026</div>
+            <div class="summary">QHINs implemented HL7 FAST security protocols for FHIR transactions. FHIR R4 has reached 92% EHR vendor support. Stage 4 (real-time nationwide FHIR exchange) projected for 2026–2027.</div>
+            <div class="zocdoc-angle">Strategic angle: Universal FHIR APIs mean a marketplace could pull patient records, insurance verification, and scheduling data from any TEFCA-connected system — dramatically reducing booking friction.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.cms.gov/priorities/burden-reduction/overview/interoperability/policies-regulations/cms-interoperability-standards-prior-authorization-drugs-proposed-rule-cms-0062-p" target="_blank">CMS Proposes FHIR-Based Prior Authorization for Drug Coverage</a></h3>
+            <div class="meta">CMS.gov · April 2026 (comment period closed June 15)</div>
+            <div class="summary">CMS proposed adopting HL7 FHIR standards for electronic prior authorization of drugs across Medicare Advantage, Medicaid managed care, CHIP, and QHP issuers. If finalized, changes take effect October 2027.</div>
+            <div class="zocdoc-angle">Strategic angle: Standardized FHIR prior auth creates API touchpoints where a marketplace can integrate — pre-auth status could become a booking-time signal.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.fiercehealthcare.com/health-tech/himss26-hhs-officials-offer-updates-interoperability-efforts-information-blocking" target="_blank">HIMSS26: HHS Updates on Information Blocking Enforcement</a></h3>
+            <div class="meta">FierceHealthcare · 2026</div>
+            <div class="summary">HHS officials provided updates on interoperability enforcement and information blocking at HIMSS26, signaling continued pressure on EHR vendors and health systems to share data freely.</div>
+            <div class="zocdoc-angle">Strategic angle: Continued enforcement creates tailwinds for platforms facilitating data exchange — harder for incumbents to keep patients locked in proprietary portals.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.wilmerhale.com/en/insights/blogs/wilmerhale-privacy-and-cybersecurity-law/20260406-key-takeaways-on-healthcare-privacy-in-2026" target="_blank">HIPAA Privacy Updates and Expanding State Health Data Laws</a></h3>
+            <div class="meta">WilmerHale / Hall Render · 2026</div>
+            <div class="summary">A February 2026 deadline required updated HIPAA Notices of Privacy Practices for 42 CFR Part 2 changes. New state laws increasingly treat location data, inferred data, and social determinants as "health information," expanding the definition well beyond traditional HIPAA scope.</div>
+            <div class="zocdoc-angle">Strategic angle: As the definition of health data expands, any platform handling patient search behavior, location data, or insurance lookups faces growing compliance obligations.</div>
+        </div>
+    </section>
+
+    <!-- SECTION 5: CONSUMER HEALTH, LABS & WEARABLES (BTY 11%) -->
+    <section>
+        <h2>Consumer Health, Labs &amp; Wearables</h2>
+        <div class="section-context">BTY's #5 theme (11%) — Labs, wearables, GLP-1s, prevention-oriented care</div>
+
+        <div class="story">
+            <h3><a href="https://hlth.com/insights/articles/april-2026-healthcare-roundup-wearables-cross-the-clinical-line-rural-hospitals-catch-a-pa-break-dexa-goes-dtc" target="_blank">Wearables Cross the Clinical Line — Oura, WHOOP, Samsung Make Moves</a></h3>
+            <div class="meta">HLTH / Boston Globe · April–June 2026</div>
+            <div class="summary">Oura acquired Galen AI (lab results, medications, visit histories) and partnered with Mira for lab-grade hormone measurements. Maven Clinic is integrating Oura biometrics into virtual women's health. WHOOP launched virtual care consultations. Fullscript partnered with Oura for clinical workflows.</div>
+            <div class="zocdoc-angle">Strategic angle: Wearables are becoming the front door to clinical care — generating continuous data that triggers care-seeking. Integrating wearable-driven recommendations with booking captures a new high-intent patient type.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.towardshealthcare.com/insights/direct-to-consumer-laboratory-testing-market-sizing" target="_blank">DTC Lab Testing Market Surging — Projected $8.16B by 2034</a></h3>
+            <div class="meta">Towards Healthcare · 2026</div>
+            <div class="summary">DTC lab testing projected to grow from $3.47B (2024) to $8.16B (2034). US market at $2B in 2025, projected to $4.3B by 2035. Function Health raised $400M+ and plans full-body MRI expansion. Consolidations: LetsGetChecked-Truepill, Hims-Trybe Labs.</div>
+            <div class="zocdoc-angle">Strategic angle: Labs was BTY's #1 voted topic in April. DTC labs create a natural booking funnel — patients with alarming results need follow-up providers. The "shoppable diagnostic" category is widening.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.prnewswire.com/news-releases/patientpoint-launches-the-consumer-health-network-helping-consumer-brands-reach-high-intent-consumers-in-trusted-healthcare-settings-302716131.html" target="_blank">PatientPoint Launches Consumer Health Network</a></h3>
+            <div class="meta">PR Newswire · March 2026</div>
+            <div class="summary">PatientPoint launched the Consumer Health Network, connecting consumer brands with high-intent consumers in healthcare settings through digital media in waiting rooms, exam rooms, and back-office environments.</div>
+            <div class="zocdoc-angle">Strategic angle: Healthcare settings themselves are becoming consumer acquisition channels. "Point-of-care media" competes for the same patient attention window where marketplace recommendations could appear.</div>
+        </div>
+    </section>
+
+    <!-- SECTION 6: COMPETITIVE ECOSYSTEM & M&A/FUNDING -->
+    <section>
+        <h2>Competitive Ecosystem &amp; M&amp;A/Funding</h2>
+        <div class="section-context">Deal flow, consolidation, and competitive moves reshaping the landscape</div>
+
+        <div class="story">
+            <h3><a href="https://www.fiercehealthcare.com/health-tech/spring-health-buy-alma-move-boost-position-mental-health-market" target="_blank">Spring Health Acquires Alma — Creating "Lifelong Mental Health Platform"</a></h3>
+            <div class="meta">FierceHealthcare · January–May 2026</div>
+            <div class="summary">Spring Health acquired Alma (26,000 providers, ~120M covered lives). Deal closed May 1, 2026. Combined entity supports 170M+ lives globally. Alma operates as a business unit; Spring CEO leads overall.</div>
+            <div class="zocdoc-angle">Strategic angle: Removes Alma as an independent marketplace player. Creates a vertically integrated employer mental health platform — squeezing marketplace intermediation in behavioral health.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.prnewswire.com/news-releases/talkiatry-raises-oversubscribed-210m-series-d-to-expand-nations-largest-full-stack-psychiatry-provider-302685678.html" target="_blank">Talkiatry Raises $210M Series D for AI-Powered Psychiatry Expansion</a></h3>
+            <div class="meta">Talkiatry PR / BHBusiness · February 2026</div>
+            <div class="summary">Oversubscribed round led by Perceptive Advisors with a16z, blisce/, Left Lane. Total raised: $400M+. Nation's largest full-stack psychiatry provider using AI across clinical and operational workflows.</div>
+            <div class="zocdoc-angle">Strategic angle: Both a potential partner (bookable provider) and competitor (direct acquisition). "Full-stack" model bypasses marketplace intermediaries.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/03/03/with-1b-in-revenue-grow-therapy-lands-150m-series-d/" target="_blank">Grow Therapy Lands $150M Series D at $1B Revenue Run Rate</a></h3>
+            <div class="meta">BHBusiness · March 2026</div>
+            <div class="summary">Grow Therapy hit $1B revenue and raised $150M. Also acquired Neosync (digital privacy) and Tenor Therapy (AI clinical support) to build a more complete platform.</div>
+            <div class="zocdoc-angle">Strategic angle: Tuck-in acquisitions signal a platform strategy that could reduce reliance on external marketplaces for patient acquisition.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.beckershospitalreview.com/healthcare-information-technology/ehrs/what-epic-is-signaling-for-2026/" target="_blank">Epic Expands AI to 150+ Features, Launches Emmie AI Patient Assistant</a></h3>
+            <div class="meta">Becker's / Healthcare IT News · 2026</div>
+            <div class="summary">Epic embedded 150+ AI features across clinical, admin, and patient-facing workflows. "Ask Emmie" in MyChart handles scheduling, billing, payments, and health questions. Unveiled AI agents and foundational models at Open@Epic 2026.</div>
+            <div class="zocdoc-angle">Strategic angle: MyChart is becoming a self-contained digital front door with AI scheduling. Every health system on Epic gets this for free, reducing need for external booking platforms.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.zelis.com/news/zelis-acquires-rivet/" target="_blank">Zelis Acquires Rivet, Launches ZAPP Edge</a></h3>
+            <div class="meta">Zelis · January 2026</div>
+            <div class="summary">Zelis acquired Rivet (revenue cycle analytics) and launched ZAPP Edge, the industry's first shared reimbursement operating layer extending directly to providers.</div>
+            <div class="zocdoc-angle">Strategic angle: Zelis building a provider-facing payments layer could become an integration point for marketplace bookings — or a competitor in the post-booking value chain.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.fiercehealthcare.com/digital-health/digital-health-startups-raked-4b-q1-12-megadeals-driving-investment-rock-health" target="_blank">Digital Health Funding Hits $4B in Q1 2026 — Strongest Since Pandemic</a></h3>
+            <div class="meta">FierceHealthcare / Rock Health · Q1 2026</div>
+            <div class="summary">$4B raised in Q1 2026 ($1B higher than Q1 2025), strongest first quarter since the pandemic peak, driven by 12 megadeals. 43 M&amp;A deals totaled $3.5B in exit value.</div>
+            <div class="zocdoc-angle">Strategic angle: Hot funding = more well-capitalized competitors. Consolidation (Spring+Alma, UHS+Talkspace) happening alongside new entrants across all BTY-tracked categories.</div>
+        </div>
+    </section>
+
+    <!-- SECTION 7: BTY GAPS -->
+    <section>
+        <h2>What You're Not Tracking <span class="gap-badge">BTY Gaps</span></h2>
+        <div class="section-context">Major healthcare narratives absent from #beyondtheyellow — worth considering for future coverage</div>
+
+        <div class="story">
+            <h3><a href="https://stacker.com/stories/careers/burnout-and-ai-are-redefining-healthcare-work-2026" target="_blank">Provider Burnout: 41.9% of Physicians Report Burnout, 55% Considering Leaving</a> <span class="gap-badge">Provider Workforce</span></h3>
+            <div class="meta">Stacker / HireQuest · 2026</div>
+            <div class="summary">41.9% of physicians report burnout symptoms. 55% of healthcare workers considering leaving in the next year. Projected shortfall of 4M+ workers by 2026 as 6.5M professionals exit. Workers report being short-staffed 43% of the time.</div>
+            <div class="zocdoc-angle">Strategic angle: Provider supply constraints directly affect marketplace availability. Burnout-driven exits reduce bookable slots, while AI-assisted scheduling (BTY's #1 topic) is positioned as the solution — a natural convergence worth tracking.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.evernorth.com/articles/health-equity-2026-insights-trends" target="_blank">Health Equity: SDOH Accounts for 80% of Health Outcomes</a> <span class="gap-badge">Health Equity</span></h3>
+            <div class="meta">Evernorth · 2026</div>
+            <div class="summary">CMS is integrating social needs screening into care models. Rising employer interest in equity-focused plan design. Affordability concerns highest among lower-income workers. SDOH accounts for up to 80% of health outcomes vs. 20% from clinical care.</div>
+            <div class="zocdoc-angle">Strategic angle: A marketplace surfacing providers by language, accessibility, sliding-scale pricing, or community health services could differentiate — and align with payer/employer criteria increasingly focused on equity.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://bhbusiness.com/2026/03/05/after-years-of-stalled-investment-behavioral-health-startups-are-experiencing-a-funding-renaissance/" target="_blank">Behavioral Health Funding Renaissance — Capital Extremely Concentrated</a> <span class="gap-badge">Behavioral Health</span></h3>
+            <div class="meta">BHBusiness · March 2026</div>
+            <div class="summary">After years of stalled investment, behavioral health is surging. Top 3 deals = 65.7% of all mental health capital (Talkiatry $210M, Grow Therapy $150M, Salma $80M). Investors pivoting from low-acuity to underserved segments: psychiatry, substance use, serious mental illness.</div>
+            <div class="zocdoc-angle">Strategic angle: Behavioral health is consolidating fast — platforms owning provider networks + employer channels are verticalizing. The window for marketplace intermediation may be narrowing.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://healthcaresuccess.com/blog/uncategorized/2026-healthcare-marketing-predictions-for-healthcare-systems-what-leaders-must-prepare-for-now.html" target="_blank">Patient Trust in Healthcare Drops from 70% to 40% in Four Years</a> <span class="gap-badge">Trust &amp; Brand</span></h3>
+            <div class="meta">Healthcare Success / FusionCX · 2026</div>
+            <div class="summary">Trust dropped from 70% in 2020 to 40% in 2024 and has not recovered. Patient trust is becoming the defining metric of health plan success. Organizations must shift from promotional to authoritative, transparent content.</div>
+            <div class="zocdoc-angle">Strategic angle: A 30-point trust drop creates opportunity for platforms offering verified reviews, transparent pricing, and guaranteed availability — exactly the differentiators a verified marketplace provides.</div>
+        </div>
+
+        <div class="story">
+            <h3><a href="https://www.fortunebusinessinsights.com/industry-reports/telehealth-market-101065" target="_blank">Telehealth Hits $81B in U.S. — Mental Health = 69% of Claims</a> <span class="gap-badge">Telehealth</span></h3>
+            <div class="meta">Fortune Business Insights · 2026</div>
+            <div class="summary">U.S. telehealth expected to hit $81.11B in 2026, growing at 23.84% CAGR. Mental health constitutes 68.9% of telehealth claim lines. Global market projected to reach $1.1T by 2034.</div>
+            <div class="zocdoc-angle">Strategic angle: Telehealth is the default delivery mode for behavioral health. A marketplace that doesn't deeply integrate telehealth availability is missing the majority of how mental health care is now delivered.</div>
+        </div>
+    </section>
+
+    <section class="archive">
+        <h2>Previous Reports</h2>
+        <ul>
+            <li><a href="healthcare-news-2026-06-15-v3.html">June 15, 2026 (v3)</a></li>
+            <li><a href="healthcare-news-2026-06-15-v2.html">June 15, 2026 (v2)</a></li>
+            <li><a href="healthcare-news-2026-06-15.html">June 15, 2026 (v1)</a></li>
+        </ul>
+    </section>
+
+    <footer>
+        Generated June 15, 2026 · Tailored to #beyondtheyellow themes · 35+ sources scanned
+    </footer>
+</body>
+</html>
