@@ -2,10 +2,10 @@ name: Weekly Healthcare Intelligence
 
 # Builds the Beyond the Yellow healthcare report from public news feeds and
 # posts it to Slack every Monday at 9am Eastern. Runs entirely on GitHub — no
-# laptop required, and no API key to manage: a model on GitHub Models does the
-# curation + Zocdoc analysis using the built-in GITHUB_TOKEN (permissions:
-# models: read). If that call is unavailable it still publishes a plain listing.
-# Only secret needed: SLACK_WEBHOOK_URL.
+# laptop required, and no API key to manage: a model on GitHub Models curates
+# the stories and WRITES each summary + Zocdoc relevance line, using the built-in
+# GITHUB_TOKEN (permissions: models: read). If that call is unavailable it still
+# publishes a plain listing. Only secret needed: SLACK_WEBHOOK_URL.
 
 on:
   # GitHub cron is UTC and does NOT adjust for daylight saving, so we fire at
@@ -242,8 +242,8 @@ jobs:
               lines = []
               for i, s in enumerate(stories):
                   d = s["date"].strftime("%b %d, %Y") if s["date"] else "n/a"
-                  summary = (s["summary"] or "")[:SUMMARY_CHARS]
-                  lines.append(f"[{i}] {s['title']}\n    source: {s['source']} | date: {d}\n    summary: {summary}")
+                  blurb = (s["summary"] or "")[:SUMMARY_CHARS]
+                  lines.append(f"[{i}] {s['title']}\n    source: {s['source']} | date: {d}\n    feed blurb (often messy/truncated/sponsored): {blurb}")
               catalog = "\n".join(lines)
               sections = ", ".join(f'"{s}"' for s in SECTIONS)
               return f"""You are the editor of "Beyond the Yellow," a weekly healthcare-intelligence \
@@ -251,23 +251,41 @@ jobs:
 
           {ZOCDOC_CONTEXT}
 
-          Below are this week's candidate news stories, each with a numbered index. Curate \
-          the briefing:
+          Below are this week's candidate news stories, each with a numbered index. The "feed \
+          blurb" is raw RSS text — it is frequently truncated, a stray sentence, or marketing \
+          boilerplate (e.g. "[Sponsored]"). Do NOT copy it. Curate the briefing:
 
           1. SELECT the 10-16 stories most relevant to Zocdoc's interests. Drop press-release \
           fluff, duplicates, and stories with no plausible connection to Zocdoc's business.
           2. ASSIGN each selected story to exactly one section. Valid sections (use the exact \
           string): {sections}.
-          3. For each selected story, write "zocdoc_relevance": ONE sharp sentence (≤ 40 words) \
-          on why it matters specifically to Zocdoc — a strategic implication, not a restatement \
-          of the headline. Start it with the substance (no "This matters because").
-          4. Write "top3": exactly 3 objects, each {{"heading": ..., "body": ...}}, capturing \
-          the week's biggest themes for Zocdoc. heading = a punchy claim (≤ 12 words). body = \
-          2-3 sentences synthesizing across stories with the strategic takeaway for Zocdoc.
+          3. For each selected story, WRITE a "summary": 2-4 complete, informative sentences \
+          that tell a reader what the article is about, its main points, and what they need to \
+          know to discuss it intelligently. Write clear, factual prose. Use the headline and \
+          blurb plus your general knowledge of the topic, but do NOT invent specific numbers, \
+          names, dates, or quotes that aren't supported, and IGNORE any sponsored/boilerplate \
+          fragments in the blurb. Never output an idiom, slogan, or a single dangling phrase.
+          4. For each selected story, write "zocdoc_relevance": ONE complete sentence naming the \
+          concrete strategic implication for Zocdoc (e.g. patient acquisition / the supply of \
+          bookable providers / coverage churn pushing patients to switch / price transparency / \
+          a competitor's move / AI in search & scheduling). Be specific to THIS story. Do NOT \
+          use idioms, slogans, or vague phrases like "a victory for advocates."
+          5. Write "top3": exactly 3 objects, each {{"heading": ..., "body": ...}}, capturing the \
+          week's biggest themes for Zocdoc. heading = a clear claim (≤ 12 words). body = 2-3 \
+          sentences synthesizing across stories with the strategic takeaway for Zocdoc.
+
+          Good summary example: "The House Energy & Commerce health subcommittee held a hearing \
+          reviewing several bills that would strengthen hospital and insurer price-transparency \
+          requirements. Lawmakers from both parties signaled support, and enforcement has ramped \
+          up, with hundreds of hospitals warned. The momentum suggests transparency rules are \
+          likely to tighten."
+          Bad summary (never do this): "Friday's decision is a victory for insurance advocates." \
+          / "As the saying goes, one man's trash is another man's treasure." / "[Sponsored] The \
+          future of healthcare AI..."
 
           Return ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
           {{"top3": [{{"heading": "...", "body": "..."}}, ...],
-            "stories": [{{"index": 0, "section": "...", "zocdoc_relevance": "..."}}, ...]}}
+            "stories": [{{"index": 0, "section": "...", "summary": "...", "zocdoc_relevance": "..."}}, ...]}}
 
           Candidate stories:
           {catalog}"""
@@ -412,7 +430,7 @@ jobs:
           """
 
 
-          def story_card(s, relevance):
+          def story_card(s, summary, relevance):
               d = s["date"].strftime("%b %d, %Y") if s["date"] else ""
               meta = esc(s["source"]) + (f" &middot; {esc(d)}" if d else "")
               angle = (f'\n                <div class="zocdoc-angle">Zocdoc relevance: {esc(relevance)}</div>'
@@ -420,7 +438,7 @@ jobs:
               return f"""            <div class="story">
                           <h3><a href="{esc(s['link'])}" target="_blank">{esc(s['title'])}</a></h3>
                           <div class="meta">{meta}</div>
-                          <div class="summary">{esc(s['summary'])}</div>{angle}
+                          <div class="summary">{esc(summary)}</div>{angle}
                       </div>"""
 
 
@@ -449,7 +467,7 @@ jobs:
 
               # group selected stories by section, preserving feed order within a section
               by_section = {name: [] for name in SECTIONS}
-              relevance = {}
+              relevance, summaries = {}, {}
               for entry in editorial.get("stories", []):
                   idx = entry.get("index")
                   section = entry.get("section")
@@ -459,6 +477,8 @@ jobs:
                       continue
                   by_section[section].append(idx)
                   relevance[idx] = entry.get("zocdoc_relevance", "")
+                  # prefer the model-written summary; fall back to the feed blurb only if absent
+                  summaries[idx] = (entry.get("summary") or "").strip() or stories[idx]["summary"]
 
               present = [name for name in SECTIONS if by_section[name]]
 
@@ -479,7 +499,8 @@ jobs:
               # sections
               section_html = []
               for name in present:
-                  cards = "\n".join(story_card(stories[i], relevance.get(i, "")) for i in by_section[name])
+                  cards = "\n".join(story_card(stories[i], summaries.get(i, ""), relevance.get(i, ""))
+                                    for i in by_section[name])
                   section_html.append(f"""    <section id="{slug(name)}">
                   <h2>{esc(name)}</h2>
           {cards}
@@ -602,12 +623,16 @@ jobs:
               ],
               "stories": [
                   {"index": 0, "section": "Competitor Moves",
+                   "summary": "Hims & Hers named a new chief medical officer to lead clinical strategy as it expands beyond its core telehealth categories into longevity medicine and peptide therapy. The move signals the company's intent to deepen its direct-to-consumer care model across more conditions.",
                    "zocdoc_relevance": "Each vertical Hims enters is a category where patients could book on Zocdoc instead — DTC pull away from the marketplace."},
                   {"index": 3, "section": "Competitor Moves",
+                   "summary": "New industry data shows telehealth usage has fallen 48% from its 2020 pandemic peak, with patients increasingly preferring phone or in-person visits. Pure-play virtual-care providers are seeing engagement decline as hybrid care becomes the norm.",
                    "zocdoc_relevance": "Declining telehealth engagement strengthens Zocdoc's in-person and hybrid booking core versus pure-play rivals."},
                   {"index": 1, "section": "Regulatory & Policy",
+                   "summary": "CMS established a new Office of Health Technology and Products to oversee AI, interoperability, and modernization of provider data systems including the National Provider Directory. It reflects growing federal investment in digital health infrastructure.",
                    "zocdoc_relevance": "A CMS focus on the National Provider Directory could create new data-integration hooks — or obligations — for scheduling platforms."},
                   {"index": 2, "section": "Regulatory & Policy",
+                   "summary": "ACA exchange enrollment is dropping sharply in several states and six insurers, including Cigna, plan to exit multiple markets after 2026. Millions of enrollees face losing their plan or having far fewer options.",
                    "zocdoc_relevance": "Millions losing exchange coverage become active provider-shoppers — prime marketplace demand."},
               ],
           }
