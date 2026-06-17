@@ -1,0 +1,813 @@
+name: Weekly Healthcare Intelligence
+
+# Builds the Beyond the Yellow healthcare report from public news feeds and
+# posts it to Slack every Monday at 9am Eastern. Runs entirely on GitHub — no
+# laptop required, and no API key to manage: a model on GitHub Models curates
+# the stories and WRITES each summary + Zocdoc relevance line, using the built-in
+# GITHUB_TOKEN (permissions: models: read). If that call is unavailable it still
+# publishes a plain listing. Only secret needed: SLACK_WEBHOOK_URL.
+
+on:
+  # GitHub cron is UTC and does NOT adjust for daylight saving, so we fire at
+  # both candidate hours and the guard step keeps only the 9am-Eastern run.
+  schedule:
+    - cron: '0 13 * * 1'   # 09:00 America/New_York during EDT (summer)
+    - cron: '0 14 * * 1'   # 09:00 America/New_York during EST (winter)
+  workflow_dispatch: {}     # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write           # allow the job to commit the regenerated page
+  models: read              # call GitHub Models (free) for curation + analysis
+
+concurrency:
+  group: healthcare-news
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only continue at 9am Eastern
+        id: guard
+        run: |
+          HOUR="$(TZ=America/New_York date +%H)"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$HOUR" != "09" ]; then
+            echo "It's ${HOUR}:00 Eastern, not 09:00 — skipping this run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repo
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the report from news feeds
+        if: steps.guard.outputs.run == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          #!/usr/bin/env python3
+          """Beyond the Yellow — rich automated healthcare report builder.
+
+          Pulls public healthcare-news RSS feeds (last 7 days), sends the candidate
+          stories to Claude, which curates the most Zocdoc-relevant ones, sorts them into
+          sections, writes a per-story "Zocdoc relevance" note, and drafts the analytical
+          "Top 3 Things to Watch." Python then renders the page deterministically — the
+          model only adds editorial (section, relevance, Top 3); every link/title/source
+          comes from the original feed item by index, so URLs are never hallucinated.
+
+          Renders index.html (the rich page, with a sticky left-hand nav), a dated archive
+          copy, and top3.txt (for the Slack post). Standard library only — the single
+          external call is an HTTPS POST to the Anthropic API.
+
+          Provider: GitHub Models by default (uses the Actions-provided GITHUB_TOKEN with
+          `permissions: models: read` — no API key to request). If an ANTHROPIC_API_KEY is
+          configured it is used instead. If neither is available, or the call fails, the
+          report falls back to a plain listing so the publish never crashes.
+
+          Env:
+            GITHUB_TOKEN        auto-provided in GitHub Actions; used for GitHub Models.
+            GH_MODEL            optional, defaults to openai/gpt-4o.
+            ANTHROPIC_API_KEY   optional upgrade; takes precedence when present.
+            ANTHROPIC_MODEL     optional, defaults to claude-sonnet-4-6.
+
+          Run with --selftest to render from built-in sample data using a mock editorial
+          response (no network, no key).
+          """
+
+          import glob
+          import html
+          import json
+          import os
+          import re
+          import sys
+          import urllib.request
+          from datetime import datetime, timedelta, timezone
+          from email.utils import parsedate_to_datetime
+          from xml.etree import ElementTree as ET
+
+          # (display name, feed url)
+          FEEDS = [
+              ("Fierce Healthcare", "https://www.fiercehealthcare.com/rss/xml"),
+              ("STAT News", "https://www.statnews.com/feed/"),
+              ("MedCity News", "https://medcitynews.com/feed/"),
+              ("Healthcare Dive", "https://www.healthcaredive.com/feeds/news/"),
+              ("MobiHealthNews", "https://www.mobihealthnews.com/feed"),
+              ("Healthcare IT News", "https://www.healthcareitnews.com/home/feed"),
+              ("Healthcare Finance News", "https://www.healthcarefinancenews.com/home/feed"),
+              ("Behavioral Health Business", "https://bhbusiness.com/feed/"),
+          ]
+
+          # Sections the report renders, in display order. Claude assigns each selected
+          # story to one of these (by exact name); anything it doesn't select is dropped.
+          SECTIONS = [
+              "AI as Healthcare Interface",
+              "Distribution, Partnerships & Front-Door Control",
+              "Pricing, Payment & Affordability",
+              "Regulatory, Policy & Interoperability",
+              "Competitive Ecosystem & M&A/Funding",
+              "Behavioral & Mental Health",
+              "Provider Operations & Revenue Cycle",
+              "Employers, Benefits & PBMs",
+              "Clinical Evidence & Outcomes",
+              "Other Industry News",
+          ]
+
+          # One-line descriptive intro per section. Always rendered under the section
+          # header (even when a section has no stories that week) so the page structure
+          # stays consistent and every header the report is known for is present.
+          SECTION_CONTEXT = {
+              "AI as Healthcare Interface": "How AI is becoming the front door to care — search, triage, navigation, and scheduling.",
+              "Distribution, Partnerships & Front-Door Control": "Who controls patient access — channel deals, partnerships, and the race to own the front door to care.",
+              "Pricing, Payment & Affordability": "Cost, price transparency, and shoppable care — what patients pay and how they decide.",
+              "Regulatory, Policy & Interoperability": "Rules, policy shifts, and data-sharing standards reshaping how care is delivered and discovered.",
+              "Competitive Ecosystem & M&A/Funding": "Competitors, adjacent players, and the deals and funding reshaping the marketplace landscape.",
+              "Behavioral & Mental Health": "Access, models, and demand in behavioral and mental health — a high-intent booking category.",
+              "Provider Operations & Revenue Cycle": "How practices run — staffing, scheduling, billing, and the revenue cycle behind every appointment.",
+              "Employers, Benefits & PBMs": "Employer-sponsored coverage, benefit design, and PBM dynamics steering where patients seek care.",
+              "Clinical Evidence & Outcomes": "New evidence, outcomes, and care-quality signals that shape patient and provider decisions.",
+              "Other Industry News": "Notable healthcare developments that don't fit the themes above but are worth a look.",
+          }
+
+          # Zocdoc-relevant cross-cutting themes the model checks for under-coverage each
+          # week. If the week's stories barely touch one of these, it surfaces in "What
+          # You're Not Tracking" as a blind spot worth watching. Kept distinct from the
+          # section themes above so the gap list never just restates a section.
+          GAP_THEMES = [
+              "Patient trust & brand",
+              "Workforce & clinician burnout",
+              "Health equity & access",
+              "Rural & underserved care",
+              "Women's & maternal health",
+              "Aging & senior care",
+              "Data privacy & cybersecurity",
+              "Global & public health",
+          ]
+
+          WINDOW_DAYS = 7
+          MAX_CANDIDATES = 40          # cap stories sent to the model (stay within free token limits)
+          SUMMARY_CHARS = 300         # truncate each summary fed to the model
+          HTTP_TIMEOUT = 25
+
+          # Primary provider: GitHub Models. Callable straight from GitHub Actions with the
+          # built-in GITHUB_TOKEN (no API key to request) once the workflow grants
+          # `permissions: models: read`. OpenAI-compatible chat-completions endpoint.
+          GH_MODELS_URL = "https://models.github.ai/inference/chat/completions"
+          GH_MODEL = os.environ.get("GH_MODEL") or "openai/gpt-4o"
+
+          # Optional fallback provider, used only if an ANTHROPIC_API_KEY secret is added.
+          ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+          ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
+          UA = "BeyondTheYellow-NewsBot/1.0 (+https://github.com/melissamorgenstern/beyond-the-yellow)"
+
+          ZOCDOC_CONTEXT = (
+              "Zocdoc is a healthcare marketplace where patients find in-network doctors and "
+              "book appointments online across specialties, insurance plans, and locations. "
+              "Zocdoc cares most about: patient acquisition and owning the 'front door' to "
+              "care; the supply of bookable providers and appointments; insurance/coverage "
+              "changes that push patients to switch providers or plans; price transparency "
+              "and shoppable care; competitors and adjacent players (Hims & Hers, pure-play "
+              "telehealth like Teladoc/Amwell, retail health, health systems building their "
+              "own scheduling); and AI used for care navigation, search, and scheduling."
+          )
+
+
+          # ----------------------------------------------------------------------------- feeds
+          def clean(text):
+              text = re.sub(r"<[^>]+>", " ", text or "")
+              text = html.unescape(text)
+              return re.sub(r"\s+", " ", text).strip()
+
+
+          def parse_date(value):
+              if not value:
+                  return None
+              value = value.strip()
+              try:
+                  dt = parsedate_to_datetime(value)
+                  if dt is not None:
+                      return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+              except (TypeError, ValueError):
+                  pass
+              try:
+                  dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                  return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+              except ValueError:
+                  return None
+
+
+          def _text(el):
+              return el.text if el is not None and el.text else ""
+
+
+          def parse_feed(xml_bytes, source):
+              stories = []
+              root = ET.fromstring(xml_bytes)
+              items = root.findall(".//item")
+              if items:
+                  for it in items:
+                      stories.append({
+                          "source": source,
+                          "title": clean(_text(it.find("title"))),
+                          "link": _text(it.find("link")).strip(),
+                          "summary": clean(_text(it.find("description"))),
+                          "date": parse_date(_text(it.find("pubDate"))),
+                      })
+                  return stories
+              ns = {"a": "http://www.w3.org/2005/Atom"}
+              entries = root.findall(".//a:entry", ns) or root.findall(".//{*}entry")
+              for en in entries:
+                  link_el = en.find("a:link", ns) or en.find("{*}link")
+                  link = link_el.get("href") if link_el is not None else ""
+                  summary_el = (en.find("a:summary", ns) or en.find("a:content", ns)
+                                or en.find("{*}summary") or en.find("{*}content"))
+                  date_raw = (_text(en.find("a:published", ns)) or _text(en.find("a:updated", ns))
+                              or _text(en.find("{*}published")) or _text(en.find("{*}updated")))
+                  title_el = en.find("a:title", ns) or en.find("{*}title")
+                  stories.append({
+                      "source": source,
+                      "title": clean(_text(title_el)),
+                      "link": (link or "").strip(),
+                      "summary": clean(_text(summary_el)),
+                      "date": parse_date(date_raw),
+                  })
+              return stories
+
+
+          def fetch(url):
+              req = urllib.request.Request(url, headers={"User-Agent": UA})
+              with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+                  return resp.read()
+
+
+          def collect_stories():
+              cutoff = datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)
+              seen, stories = set(), []
+              for source, url in FEEDS:
+                  try:
+                      parsed = parse_feed(fetch(url), source)
+                  except Exception as exc:
+                      print(f"  ! skipped {source}: {exc}", file=sys.stderr)
+                      continue
+                  kept = 0
+                  for s in parsed:
+                      if not s["title"] or not s["link"]:
+                          continue
+                      if s["date"] is not None and s["date"] < cutoff:
+                          continue
+                      key = s["link"].split("?")[0].lower()
+                      if key in seen:
+                          continue
+                      seen.add(key)
+                      stories.append(s)
+                      kept += 1
+                  print(f"  + {source}: {kept} stories", file=sys.stderr)
+              return stories
+
+
+          # ----------------------------------------------------------------------------- claude
+          def build_prompt(stories):
+              lines = []
+              for i, s in enumerate(stories):
+                  d = s["date"].strftime("%b %d, %Y") if s["date"] else "n/a"
+                  blurb = (s["summary"] or "")[:SUMMARY_CHARS]
+                  lines.append(f"[{i}] {s['title']}\n    source: {s['source']} | date: {d}\n    feed blurb (often messy/truncated/sponsored): {blurb}")
+              catalog = "\n".join(lines)
+              sections = ", ".join(f'"{s}"' for s in SECTIONS)
+              gap_themes = ", ".join(f'"{t}"' for t in GAP_THEMES)
+              return f"""You are the editor of "Beyond the Yellow," a weekly healthcare-intelligence \
+          briefing written for leaders at Zocdoc.
+
+          {ZOCDOC_CONTEXT}
+
+          Below are this week's candidate news stories, each with a numbered index. The "feed \
+          blurb" is raw RSS text — it is frequently truncated, a stray sentence, or marketing \
+          boilerplate (e.g. "[Sponsored]"). Do NOT copy it. Curate the briefing:
+
+          1. SELECT the 18-26 stories most relevant to Zocdoc's interests. Drop press-release \
+          fluff, duplicates, and stories with no plausible connection to Zocdoc's business. \
+          Aim for BREADTH — try to put at least one or two stories in as many of the sections \
+          below as the news genuinely supports, not just one or two sections.
+          2. ASSIGN each selected story to exactly one section. Valid sections (use the exact \
+          string): {sections}. Spread stories across sections by topic; do NOT pile everything \
+          into one or two sections. Use "Other Industry News" ONLY for a genuinely relevant story \
+          that fits none of the specific themes — not as a default dumping ground.
+          3. For each selected story, WRITE a "summary": 2-4 complete, informative sentences \
+          that tell a reader what the article is about, its main points, and what they need to \
+          know to discuss it intelligently. Write clear, factual prose. Use the headline and \
+          blurb plus your general knowledge of the topic, but do NOT invent specific numbers, \
+          names, dates, or quotes that aren't supported, and IGNORE any sponsored/boilerplate \
+          fragments in the blurb. Never output an idiom, slogan, or a single dangling phrase.
+          4. For each selected story, write "zocdoc_relevance": ONE complete sentence naming the \
+          concrete strategic implication for Zocdoc (e.g. patient acquisition / the supply of \
+          bookable providers / coverage churn pushing patients to switch / price transparency / \
+          a competitor's move / AI in search & scheduling). Be specific to THIS story. Do NOT \
+          use idioms, slogans, or vague phrases like "a victory for advocates."
+          5. Write "top3": exactly 3 objects, each {{"heading": ..., "body": ...}}, capturing the \
+          week's biggest themes for Zocdoc. heading = a clear claim (≤ 12 words). body = 2-3 \
+          sentences synthesizing across stories with the strategic takeaway for Zocdoc.
+          6. Write "gaps" ("What You're Not Tracking"): 3-5 objects, each {{"topic": ..., "note": \
+          ...}}. These are Zocdoc-relevant themes that were ABSENT or barely covered in this \
+          week's stories but that leaders should keep on their radar. Draw from themes like: \
+          {gap_themes}. topic = a short label (≤ 6 words). note = ONE sentence on why it matters \
+          to Zocdoc and why it's worth watching even though it was quiet this week. Pick themes \
+          genuinely under-represented in the selected stories — do not restate a section above.
+
+          Good summary example: "The House Energy & Commerce health subcommittee held a hearing \
+          reviewing several bills that would strengthen hospital and insurer price-transparency \
+          requirements. Lawmakers from both parties signaled support, and enforcement has ramped \
+          up, with hundreds of hospitals warned. The momentum suggests transparency rules are \
+          likely to tighten."
+          Bad summary (never do this): "Friday's decision is a victory for insurance advocates." \
+          / "As the saying goes, one man's trash is another man's treasure." / "[Sponsored] The \
+          future of healthcare AI..."
+
+          Return ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
+          {{"top3": [{{"heading": "...", "body": "..."}}, ...],
+            "stories": [{{"index": 0, "section": "...", "summary": "...", "zocdoc_relevance": "..."}}, ...],
+            "gaps": [{{"topic": "...", "note": "..."}}, ...]}}
+
+          Candidate stories:
+          {catalog}"""
+
+
+          def call_github_models(prompt):
+              token = os.environ.get("GITHUB_TOKEN")
+              if not token:
+                  raise RuntimeError("GITHUB_TOKEN not set")
+              body = json.dumps({
+                  "model": GH_MODEL,
+                  "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 4000,
+                  "temperature": 0.4,
+              }).encode()
+              req = urllib.request.Request(
+                  GH_MODELS_URL, data=body,
+                  headers={
+                      "Authorization": "Bearer " + token,
+                      "Content-Type": "application/json",
+                      "Accept": "application/json",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=90) as resp:
+                  payload = json.loads(resp.read().decode())
+              return payload["choices"][0]["message"]["content"]
+
+
+          def call_anthropic(prompt):
+              key = os.environ.get("ANTHROPIC_API_KEY")
+              if not key:
+                  raise RuntimeError("ANTHROPIC_API_KEY not set")
+              body = json.dumps({
+                  "model": ANTHROPIC_MODEL,
+                  "max_tokens": 4096,
+                  "messages": [{"role": "user", "content": prompt}],
+              }).encode()
+              req = urllib.request.Request(
+                  ANTHROPIC_URL, data=body,
+                  headers={
+                      "x-api-key": key,
+                      "anthropic-version": "2023-06-01",
+                      "content-type": "application/json",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=90) as resp:
+                  payload = json.loads(resp.read().decode())
+              parts = [b.get("text", "") for b in payload.get("content", []) if b.get("type") == "text"]
+              return "".join(parts)
+
+
+          def call_llm(prompt):
+              """Prefer GitHub Models (free, uses the Actions GITHUB_TOKEN — no key to
+              request). Use an Anthropic key instead only if one has been configured."""
+              if os.environ.get("ANTHROPIC_API_KEY"):
+                  return call_anthropic(prompt)
+              if os.environ.get("GITHUB_TOKEN"):
+                  return call_github_models(prompt)
+              raise RuntimeError("no LLM credential (GITHUB_TOKEN or ANTHROPIC_API_KEY) in env")
+
+
+          def parse_editorial(text):
+              """Pull the JSON object out of the model's reply, tolerating stray fences/prose."""
+              text = text.strip()
+              if text.startswith("```"):
+                  text = re.sub(r"^```(?:json)?\s*", "", text)
+                  text = re.sub(r"\s*```$", "", text)
+              start, end = text.find("{"), text.rfind("}")
+              if start == -1 or end == -1:
+                  raise ValueError("no JSON object in model reply")
+              data = json.loads(text[start:end + 1])
+              if not isinstance(data.get("top3"), list) or not isinstance(data.get("stories"), list):
+                  raise ValueError("editorial JSON missing top3/stories")
+              return data
+
+
+          # ----------------------------------------------------------------------------- render
+          def slug(name):
+              return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+          def esc(text):
+              return html.escape(text or "", quote=True)
+
+
+          CSS = """
+                  * { margin: 0; padding: 0; box-sizing: border-box; }
+                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      background: #fafafa; color: #1a1a1a; line-height: 1.6; padding: 2rem; }
+                  header { border-bottom: 4px solid #f5c518; padding-bottom: 1.5rem; margin: 0 auto 2rem;
+                      max-width: 1140px; }
+                  header h1 { font-size: 2rem; color: #1a1a1a; letter-spacing: -0.5px; }
+                  header h1 span { color: #f5c518; }
+                  .date { color: #666; font-size: 0.95rem; margin-top: 0.25rem; }
+                  .layout { display: flex; gap: 2.5rem; max-width: 1140px; margin: 0 auto; align-items: flex-start; }
+                  nav.sidebar { width: 210px; flex-shrink: 0; position: sticky; top: 1.5rem;
+                      align-self: flex-start; font-size: 0.9rem; }
+                  nav.sidebar .nav-title { text-transform: uppercase; letter-spacing: 1px; font-size: 0.7rem;
+                      color: #999; margin-bottom: 0.75rem; font-weight: 600; }
+                  nav.sidebar ul { list-style: none; padding: 0; border-left: 2px solid #eee; }
+                  nav.sidebar li a { display: block; padding: 0.3rem 0 0.3rem 0.85rem; margin-left: -2px;
+                      color: #555; text-decoration: none; border-left: 2px solid transparent; }
+                  nav.sidebar li a:hover { color: #b8860b; border-left-color: #f5c518; }
+                  main { flex: 1; min-width: 0; max-width: 760px; }
+                  .top-watch { background: linear-gradient(135deg, #fffef5, #fff9db); border: 2px solid #f5c518;
+                      border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem; scroll-margin-top: 1.5rem; }
+                  .top-watch h2 { font-size: 1.3rem; margin-bottom: 1rem; color: #b8860b; }
+                  .watch-item { padding: 0.75rem 0; border-bottom: 1px solid #f0e6b8; }
+                  .watch-item:last-child { border-bottom: none; }
+                  .watch-item h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+                  .watch-item p { font-size: 0.9rem; color: #444; }
+                  section { margin-bottom: 2.5rem; scroll-margin-top: 1.5rem; }
+                  section h2 { font-size: 1.4rem; border-left: 4px solid #f5c518; padding-left: 0.75rem;
+                      margin-bottom: 1.25rem; }
+                  .story { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1.25rem;
+                      margin-bottom: 1rem; transition: box-shadow 0.2s; }
+                  .story:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+                  .story h3 { font-size: 1.05rem; margin-bottom: 0.5rem; }
+                  .story h3 a { color: #1a1a1a; text-decoration: none; }
+                  .story h3 a:hover { color: #b8860b; }
+                  .story .meta { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+                  .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
+                  .story .zocdoc-angle { font-size: 0.85rem; color: #b8860b; font-style: italic;
+                      background: #fffef5; padding: 0.5rem 0.75rem; border-radius: 4px; margin-top: 0.5rem; }
+                  .section-context { font-size: 0.9rem; color: #666; margin-bottom: 1rem; }
+                  .section-empty { font-size: 0.88rem; color: #999; font-style: italic; margin: 0 0 0.5rem; }
+                  .section-empty a { color: #b8860b; }
+                  .gap-item { background: #fff; border: 1px solid #ececec; border-left: 4px solid #f5c518;
+                      border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 0.6rem; }
+                  .gap-badge { display: inline-block; background: #fff3c4; color: #8a6d00; font-size: 0.7rem;
+                      font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 0.15rem 0.55rem;
+                      border-radius: 10px; margin-right: 0.6rem; white-space: nowrap; }
+                  .gap-note { font-size: 0.92rem; color: #333; }
+                  .archive { margin-bottom: 2rem; }
+                  .archive ul { list-style: none; padding: 0; }
+                  .archive li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+                  .archive li a { color: #1a1a1a; text-decoration: none; font-size: 0.95rem; }
+                  .archive li a:hover { color: #b8860b; }
+                  .note { background: #fff8e6; border: 1px solid #f0e0a0; border-radius: 6px; padding: 0.75rem 1rem;
+                      font-size: 0.85rem; color: #8a6d00; margin-bottom: 1.5rem; }
+                  footer { text-align: center; color: #999; font-size: 0.8rem; padding-top: 2rem;
+                      border-top: 1px solid #eee; max-width: 1140px; margin: 0 auto; }
+                  @media (max-width: 760px) {
+                      body { padding: 1rem; }
+                      .layout { flex-direction: column; gap: 1.5rem; }
+                      nav.sidebar { position: static; width: auto; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
+                      nav.sidebar ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; border-left: none; }
+                      nav.sidebar li a { border-left: none; padding-left: 0; }
+                      main { max-width: none; }
+                  }
+          """
+
+
+          def story_card(s, summary, relevance):
+              d = s["date"].strftime("%b %d, %Y") if s["date"] else ""
+              meta = esc(s["source"]) + (f" &middot; {esc(d)}" if d else "")
+              angle = (f'\n                <div class="zocdoc-angle">Zocdoc relevance: {esc(relevance)}</div>'
+                       if relevance else "")
+              return f"""            <div class="story">
+                          <h3><a href="{esc(s['link'])}" target="_blank">{esc(s['title'])}</a></h3>
+                          <div class="meta">{meta}</div>
+                          <div class="summary">{esc(summary)}</div>{angle}
+                      </div>"""
+
+
+          def archive_items(today_name):
+              items = []
+              for path in sorted(glob.glob("healthcare-news-*.html"), reverse=True):
+                  if path == today_name:
+                      continue
+                  m = re.search(r"(\d{4})-(\d{2})-(\d{2})", path)
+                  label = path
+                  if m:
+                      try:
+                          label = datetime(int(m[1]), int(m[2]), int(m[3])).strftime("%B %d, %Y")
+                      except ValueError:
+                          pass
+                  items.append(f'            <li><a href="{esc(path)}">{esc(label)}</a></li>')
+              if not items:
+                  items.append('            <li><a href="healthcare-news-2026-06-15.html">June 15, 2026 (v1)</a></li>')
+              return "\n".join(items)
+
+
+          def build_page(editorial, stories, generated_dt, today_name, note=None):
+              week_start = (generated_dt - timedelta(days=WINDOW_DAYS)).strftime("%B %-d")
+              week_end = generated_dt.strftime("%B %-d, %Y")
+              gen = generated_dt.strftime("%B %-d, %Y")
+
+              # group selected stories by section, preserving feed order within a section
+              by_section = {name: [] for name in SECTIONS}
+              relevance, summaries = {}, {}
+              for entry in editorial.get("stories", []):
+                  idx = entry.get("index")
+                  section = entry.get("section")
+                  if not isinstance(idx, int) or idx < 0 or idx >= len(stories):
+                      continue
+                  if section not in by_section:
+                      continue
+                  by_section[section].append(idx)
+                  relevance[idx] = entry.get("zocdoc_relevance", "")
+                  # prefer the model-written summary; fall back to the feed blurb only if absent
+                  summaries[idx] = (entry.get("summary") or "").strip() or stories[idx]["summary"]
+
+              # Every section always renders (header + intro), so the page structure is
+              # consistent week to week and no agreed-on header silently disappears.
+              present = list(SECTIONS)
+
+              # "What You're Not Tracking" gap watchlist
+              gaps = [g for g in editorial.get("gaps", [])
+                      if isinstance(g, dict) and (g.get("topic") or g.get("note"))]
+
+              # nav — lists every section, the gap watchlist, and the archive
+              nav = ['            <li><a href="#top3">Top 3 to Watch</a></li>']
+              for name in present:
+                  nav.append(f'            <li><a href="#{slug(name)}">{esc(name)}</a></li>')
+              nav.append('            <li><a href="#not-tracking">What You&#x27;re Not Tracking</a></li>')
+              nav.append('            <li><a href="#previous-reports">Previous Reports</a></li>')
+
+              # top 3
+              watch = []
+              for i, item in enumerate(editorial.get("top3", [])[:3], 1):
+                  watch.append(f"""        <div class="watch-item">
+                      <h3>{i}. {esc(item.get('heading', ''))}</h3>
+                      <p>{esc(item.get('body', ''))}</p>
+                  </div>""")
+
+              # sections — always render every section with its descriptive intro;
+              # populated sections show story cards, quiet sections show a brief note.
+              section_html = []
+              for name in present:
+                  intro = SECTION_CONTEXT.get(name, "")
+                  intro_html = f'        <p class="section-context">{esc(intro)}</p>\n' if intro else ""
+                  if by_section[name]:
+                      body = "\n".join(story_card(stories[i], summaries.get(i, ""), relevance.get(i, ""))
+                                       for i in by_section[name])
+                  else:
+                      body = ('        <p class="section-empty">Nothing notable crossed the wire this week — '
+                              'see <a href="#not-tracking">What You&#x27;re Not Tracking</a> below.</p>')
+                  section_html.append(f"""    <section id="{slug(name)}">
+                  <h2>{esc(name)}</h2>
+          {intro_html}{body}
+              </section>""")
+
+              # "What You're Not Tracking" section — always rendered. Uses the model's
+              # gap analysis when present; otherwise falls back to the static watchlist.
+              if gaps:
+                  gap_items = "\n".join(
+                      f'        <div class="gap-item"><span class="gap-badge">{esc(g.get("topic", ""))}</span>'
+                      f'<span class="gap-note">{esc(g.get("note", ""))}</span></div>'
+                      for g in gaps)
+              else:
+                  gap_items = "\n".join(
+                      f'        <div class="gap-item"><span class="gap-badge">{esc(t)}</span>'
+                      f'<span class="gap-note">Quiet in this week&#x27;s feeds &mdash; worth watching for Zocdoc.</span></div>'
+                      for t in GAP_THEMES)
+              gaps_html = f"""
+              <section id="not-tracking">
+                  <h2>What You&#x27;re Not Tracking</h2>
+                  <p class="section-context">Zocdoc-relevant themes that were quiet in this week&#x27;s feeds &mdash; blind spots worth keeping on your radar.</p>
+          {gap_items}
+              </section>
+          """
+
+              note_html = f'\n        <div class="note">{esc(note)}</div>' if note else ""
+              n_stories = sum(len(v) for v in by_section.values())
+
+              return f"""<!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Beyond the Yellow — Healthcare Intelligence</title>
+              <style>{CSS}    </style>
+          </head>
+          <body>
+              <header>
+                  <h1>Beyond the <span>Yellow</span> &mdash; Healthcare Intelligence</h1>
+                  <div class="date">Week of {week_start} &ndash; {week_end} | Generated {gen}</div>
+              </header>
+
+              <div class="layout">
+                  <nav class="sidebar">
+                      <div class="nav-title">On this page</div>
+                      <ul>
+          {chr(10).join(nav)}
+                      </ul>
+                  </nav>
+
+                  <main>{note_html}
+              <div class="top-watch" id="top3">
+                  <h2>Top 3 Things to Watch</h2>
+          {chr(10).join(watch)}
+              </div>
+
+          {chr(10).join(section_html)}
+          {gaps_html}
+              <section class="archive" id="previous-reports">
+                  <h2>Previous Reports</h2>
+                  <ul>
+          {archive_items(today_name)}
+                  </ul>
+              </section>
+                  </main>
+              </div>
+
+              <footer>
+                  Generated {gen} &middot; {n_stories} stories curated from {len(stories)} scanned across {len(FEEDS)} feeds
+              </footer>
+          </body>
+          </html>
+          """
+
+
+          def write_top3(editorial):
+              lines = []
+              for item in editorial.get("top3", [])[:3]:
+                  h = item.get("heading", "").strip()
+                  if h:
+                      lines.append(f"• {h}")
+              with open("top3.txt", "w", encoding="utf-8") as f:
+                  f.write("\n".join(lines) if lines else "Your weekly healthcare intelligence roundup is ready.")
+
+
+          def write_outputs(editorial, stories, note=None):
+              now = datetime.now(timezone.utc)
+              today_name = "healthcare-news-" + now.strftime("%Y-%m-%d") + ".html"
+              page = build_page(editorial, stories, now, today_name, note=note)
+              for path in ("index.html", today_name):
+                  with open(path, "w", encoding="utf-8") as f:
+                      f.write(page)
+              write_top3(editorial)
+              print(f"Wrote index.html + {today_name} + top3.txt", file=sys.stderr)
+
+
+          def fallback_editorial(stories):
+              """No AI available — list everything under one section, no relevance notes."""
+              return {
+                  "top3": [{"heading": "This week's headlines are below",
+                            "body": "AI analysis was unavailable for this edition, so stories are "
+                                    "listed without curation. The next scheduled run will restore "
+                                    "the full briefing."}],
+                  "stories": [{"index": i, "section": "Other Industry News", "zocdoc_relevance": ""}
+                              for i in range(len(stories))],
+              }
+
+
+          # ----------------------------------------------------------------------------- main
+          SAMPLE = [
+              {"source": "Hims & Hers IR", "title": "Hims & Hers names new Chief Medical Officer, eyes longevity",
+               "link": "https://example.com/hims-cmo",
+               "summary": "Hims & Hers appointed a new CMO to guide expansion into longevity and peptide therapy.",
+               "date": datetime.now(timezone.utc) - timedelta(days=1)},
+              {"source": "Healthcare Dive", "title": "CMS creates Office of Health Technology and Products",
+               "link": "https://example.com/cms-ohtp",
+               "summary": "CMS established a new office overseeing AI, interoperability, and the National Provider Directory.",
+               "date": datetime.now(timezone.utc) - timedelta(days=2)},
+              {"source": "Modern Healthcare", "title": "ACA exchange enrollment drops as six insurers exit",
+               "link": "https://example.com/aca-exits",
+               "summary": "Enrollment fell double digits in several states; Cigna will exit 11 states after 2026.",
+               "date": datetime.now(timezone.utc) - timedelta(days=3)},
+              {"source": "Definitive Healthcare", "title": "Telehealth usage down 48% from 2020 peak",
+               "link": "https://example.com/telehealth-down",
+               "summary": "Patients increasingly prefer phone or in-person care; pure telehealth engagement is fading.",
+               "date": datetime.now(timezone.utc) - timedelta(days=4)},
+          ]
+
+          SAMPLE_EDITORIAL = {
+              "top3": [
+                  {"heading": "Insurance coverage is crumbling — millions will shop for providers",
+                   "body": "ACA exits and enrollment drops mean patients are losing plans and providers. "
+                           "Coverage churn is a discovery moment — exactly when a marketplace wins."},
+                  {"heading": "Telehealth-only models keep fading",
+                   "body": "Usage is down 48% from its peak as patients return to in-person care. "
+                           "Validates Zocdoc's hybrid model over pure-play telehealth rivals."},
+                  {"heading": "CMS is doubling down on digital infrastructure",
+                   "body": "A new health-tech office focused on the National Provider Directory and "
+                           "interoperability could reshape provider data — opportunity and compliance both."},
+              ],
+              "stories": [
+                  {"index": 0, "section": "Competitive Ecosystem & M&A/Funding",
+                   "summary": "Hims & Hers named a new chief medical officer to lead clinical strategy as it expands beyond its core telehealth categories into longevity medicine and peptide therapy. The move signals the company's intent to deepen its direct-to-consumer care model across more conditions.",
+                   "zocdoc_relevance": "Each vertical Hims enters is a category where patients could book on Zocdoc instead — DTC pull away from the marketplace."},
+                  {"index": 3, "section": "Distribution, Partnerships & Front-Door Control",
+                   "summary": "New industry data shows telehealth usage has fallen 48% from its 2020 pandemic peak, with patients increasingly preferring phone or in-person visits. Pure-play virtual-care providers are seeing engagement decline as hybrid care becomes the norm.",
+                   "zocdoc_relevance": "Declining telehealth engagement strengthens Zocdoc's in-person and hybrid booking core versus pure-play rivals."},
+                  {"index": 1, "section": "Regulatory, Policy & Interoperability",
+                   "summary": "CMS established a new Office of Health Technology and Products to oversee AI, interoperability, and modernization of provider data systems including the National Provider Directory. It reflects growing federal investment in digital health infrastructure.",
+                   "zocdoc_relevance": "A CMS focus on the National Provider Directory could create new data-integration hooks — or obligations — for scheduling platforms."},
+                  {"index": 2, "section": "Pricing, Payment & Affordability",
+                   "summary": "ACA exchange enrollment is dropping sharply in several states and six insurers, including Cigna, plan to exit multiple markets after 2026. Millions of enrollees face losing their plan or having far fewer options.",
+                   "zocdoc_relevance": "Millions losing exchange coverage become active provider-shoppers — prime marketplace demand."},
+              ],
+              "gaps": [
+                  {"topic": "Clinician burnout & supply",
+                   "note": "No major workforce stories this week, but provider availability is the constraint on bookable supply — worth watching as staffing pressures build."},
+                  {"topic": "Patient trust & brand",
+                   "note": "Quiet this week, yet trust in where patients book care is the moat a marketplace defends against DTC and health-system schedulers."},
+                  {"topic": "Data privacy & cybersecurity",
+                   "note": "No breach news surfaced, but a single healthcare data incident can reshape patient willingness to share information with digital platforms."},
+                  {"topic": "Women's & maternal health",
+                   "note": "Under-covered this cycle despite being a high-intent booking category and a frequent entry point for new patients to a marketplace."},
+              ],
+          }
+
+
+          def main():
+              if "--selftest" in sys.argv:
+                  write_outputs(SAMPLE_EDITORIAL, SAMPLE, note=None)
+                  page = open("index.html", encoding="utf-8").read()
+                  assert "top-watch" in page and "zocdoc-angle" in page, "missing rich elements"
+                  for name in SECTIONS:
+                      assert esc(name) in page, f"missing section header: {name}"
+                  assert "What You&#x27;re Not Tracking" in page and 'id="not-tracking"' in page, "missing gap section"
+                  assert 'id="top3"' in page and "nav.sidebar" in CSS, "missing nav anchors"
+                  assert "section-empty" in page, "empty-section state not rendered"
+                  print(f"selftest OK: rich page rendered with Top 3, all {len(SECTIONS)} sections, gaps, and nav.")
+                  return
+
+              print("Fetching healthcare news feeds…", file=sys.stderr)
+              stories = collect_stories()
+              if not stories:
+                  print("WARNING: no stories fetched; writing minimal page.", file=sys.stderr)
+                  write_outputs(fallback_editorial([]), [],
+                                note="No stories were available from the news feeds this week.")
+                  return
+              stories = stories[:MAX_CANDIDATES]
+
+              provider = "Anthropic " + ANTHROPIC_MODEL if os.environ.get("ANTHROPIC_API_KEY") else "GitHub Models " + GH_MODEL
+              try:
+                  print(f"Asking {provider} to curate {len(stories)} stories…", file=sys.stderr)
+                  editorial = parse_editorial(call_llm(build_prompt(stories)))
+                  write_outputs(editorial, stories, note=None)
+              except Exception as exc:
+                  print(f"  ! AI curation failed ({exc}); publishing a plain listing.", file=sys.stderr)
+                  write_outputs(fallback_editorial(stories), stories,
+                                note="AI analysis was unavailable for this edition — stories are listed "
+                                     "without curation. The next run will restore the full briefing.")
+
+
+          if __name__ == "__main__":
+              main()
+          PY
+
+      - name: Commit and publish the page
+        if: steps.guard.outputs.run == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update healthcare intelligence report - $(TZ=America/New_York date +%Y-%m-%d)"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Post to Slack
+        if: steps.guard.outputs.run == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os, urllib.request
+          url = os.environ["SLACK_WEBHOOK_URL"]
+          pages = "https://melissamorgenstern.github.io/beyond-the-yellow/"
+          week = datetime.datetime.now().strftime("%B %d, %Y")
+          try:
+              top3 = open("top3.txt", encoding="utf-8").read().strip()
+          except FileNotFoundError:
+              top3 = "Your weekly healthcare intelligence roundup is ready."
+          msg = f":newspaper: *Beyond the Yellow — Week of {week}*\n\n{top3}\n\n:link: *Full report:* {pages}"
+          data = json.dumps({"message": msg}).encode()
+          req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+          print(urllib.request.urlopen(req).read().decode())
+          PY
