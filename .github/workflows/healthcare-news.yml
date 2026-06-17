@@ -111,9 +111,29 @@ jobs:
           # story to one of these (by exact name); anything it doesn't select is dropped.
           SECTIONS = [
               "Competitor Moves",
+              "AI & Care Navigation",
               "Industry Trends",
               "Regulatory & Policy",
+              "Pricing, Payment & Coverage",
+              "Care Delivery & New Models",
+              "Behavioral & Mental Health",
               "Health System News",
+              "Deals, Funding & M&A",
+          ]
+
+          # Zocdoc-relevant themes the model checks for under-coverage each week. If the
+          # week's stories barely touch one of these, it surfaces in "What You're Not
+          # Tracking" as a blind spot worth watching.
+          GAP_THEMES = [
+              "Patient trust & brand",
+              "Workforce & clinician burnout",
+              "Health equity & access",
+              "Rural & underserved care",
+              "Women's & maternal health",
+              "Aging & senior care",
+              "Data privacy & cybersecurity",
+              "Employer & PBM dynamics",
+              "Price transparency & shoppable care",
           ]
 
           WINDOW_DAYS = 7
@@ -246,6 +266,7 @@ jobs:
                   lines.append(f"[{i}] {s['title']}\n    source: {s['source']} | date: {d}\n    feed blurb (often messy/truncated/sponsored): {blurb}")
               catalog = "\n".join(lines)
               sections = ", ".join(f'"{s}"' for s in SECTIONS)
+              gap_themes = ", ".join(f'"{t}"' for t in GAP_THEMES)
               return f"""You are the editor of "Beyond the Yellow," a weekly healthcare-intelligence \
           briefing written for leaders at Zocdoc.
 
@@ -255,10 +276,12 @@ jobs:
           blurb" is raw RSS text — it is frequently truncated, a stray sentence, or marketing \
           boilerplate (e.g. "[Sponsored]"). Do NOT copy it. Curate the briefing:
 
-          1. SELECT the 10-16 stories most relevant to Zocdoc's interests. Drop press-release \
-          fluff, duplicates, and stories with no plausible connection to Zocdoc's business.
+          1. SELECT the 14-20 stories most relevant to Zocdoc's interests. Drop press-release \
+          fluff, duplicates, and stories with no plausible connection to Zocdoc's business. \
+          Aim for breadth — populate as many of the sections below as the stories genuinely support.
           2. ASSIGN each selected story to exactly one section. Valid sections (use the exact \
-          string): {sections}.
+          string): {sections}. Spread stories across sections by topic; do not pile everything \
+          into one or two sections.
           3. For each selected story, WRITE a "summary": 2-4 complete, informative sentences \
           that tell a reader what the article is about, its main points, and what they need to \
           know to discuss it intelligently. Write clear, factual prose. Use the headline and \
@@ -273,6 +296,12 @@ jobs:
           5. Write "top3": exactly 3 objects, each {{"heading": ..., "body": ...}}, capturing the \
           week's biggest themes for Zocdoc. heading = a clear claim (≤ 12 words). body = 2-3 \
           sentences synthesizing across stories with the strategic takeaway for Zocdoc.
+          6. Write "gaps" ("What You're Not Tracking"): 3-5 objects, each {{"topic": ..., "note": \
+          ...}}. These are Zocdoc-relevant themes that were ABSENT or barely covered in this \
+          week's stories but that leaders should keep on their radar. Draw from themes like: \
+          {gap_themes}. topic = a short label (≤ 6 words). note = ONE sentence on why it matters \
+          to Zocdoc and why it's worth watching even though it was quiet this week. Pick themes \
+          genuinely under-represented in the selected stories — do not restate a section above.
 
           Good summary example: "The House Energy & Commerce health subcommittee held a hearing \
           reviewing several bills that would strengthen hospital and insurer price-transparency \
@@ -285,7 +314,8 @@ jobs:
 
           Return ONLY a JSON object, no prose, no markdown fences, in exactly this shape:
           {{"top3": [{{"heading": "...", "body": "..."}}, ...],
-            "stories": [{{"index": 0, "section": "...", "summary": "...", "zocdoc_relevance": "..."}}, ...]}}
+            "stories": [{{"index": 0, "section": "...", "summary": "...", "zocdoc_relevance": "..."}}, ...],
+            "gaps": [{{"topic": "...", "note": "..."}}, ...]}}
 
           Candidate stories:
           {catalog}"""
@@ -410,6 +440,13 @@ jobs:
                   .story .summary { font-size: 0.95rem; color: #333; margin-bottom: 0.5rem; }
                   .story .zocdoc-angle { font-size: 0.85rem; color: #b8860b; font-style: italic;
                       background: #fffef5; padding: 0.5rem 0.75rem; border-radius: 4px; margin-top: 0.5rem; }
+                  .section-context { font-size: 0.9rem; color: #666; margin-bottom: 1rem; }
+                  .gap-item { background: #fff; border: 1px solid #ececec; border-left: 4px solid #f5c518;
+                      border-radius: 6px; padding: 0.7rem 1rem; margin-bottom: 0.6rem; }
+                  .gap-badge { display: inline-block; background: #fff3c4; color: #8a6d00; font-size: 0.7rem;
+                      font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 0.15rem 0.55rem;
+                      border-radius: 10px; margin-right: 0.6rem; white-space: nowrap; }
+                  .gap-note { font-size: 0.92rem; color: #333; }
                   .archive { margin-bottom: 2rem; }
                   .archive ul { list-style: none; padding: 0; }
                   .archive li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
@@ -482,10 +519,16 @@ jobs:
 
               present = [name for name in SECTIONS if by_section[name]]
 
+              # "What You're Not Tracking" gap watchlist
+              gaps = [g for g in editorial.get("gaps", [])
+                      if isinstance(g, dict) and (g.get("topic") or g.get("note"))]
+
               # nav
               nav = ['            <li><a href="#top3">Top 3 to Watch</a></li>']
               for name in present:
                   nav.append(f'            <li><a href="#{slug(name)}">{esc(name)}</a></li>')
+              if gaps:
+                  nav.append('            <li><a href="#not-tracking">What You&#x27;re Not Tracking</a></li>')
               nav.append('            <li><a href="#previous-reports">Previous Reports</a></li>')
 
               # top 3
@@ -505,6 +548,21 @@ jobs:
                   <h2>{esc(name)}</h2>
           {cards}
               </section>""")
+
+              # "What You're Not Tracking" section
+              gaps_html = ""
+              if gaps:
+                  gap_items = "\n".join(
+                      f'        <div class="gap-item"><span class="gap-badge">{esc(g.get("topic", ""))}</span>'
+                      f'<span class="gap-note">{esc(g.get("note", ""))}</span></div>'
+                      for g in gaps)
+                  gaps_html = f"""
+              <section id="not-tracking">
+                  <h2>What You&#x27;re Not Tracking</h2>
+                  <p class="section-context">Zocdoc-relevant themes that were quiet in this week&#x27;s feeds &mdash; blind spots worth keeping on your radar.</p>
+          {gap_items}
+              </section>
+          """
 
               note_html = f'\n        <div class="note">{esc(note)}</div>' if note else ""
               n_stories = sum(len(v) for v in by_section.values())
@@ -538,7 +596,7 @@ jobs:
               </div>
 
           {chr(10).join(section_html)}
-
+          {gaps_html}
               <section class="archive" id="previous-reports">
                   <h2>Previous Reports</h2>
                   <ul>
@@ -625,7 +683,7 @@ jobs:
                   {"index": 0, "section": "Competitor Moves",
                    "summary": "Hims & Hers named a new chief medical officer to lead clinical strategy as it expands beyond its core telehealth categories into longevity medicine and peptide therapy. The move signals the company's intent to deepen its direct-to-consumer care model across more conditions.",
                    "zocdoc_relevance": "Each vertical Hims enters is a category where patients could book on Zocdoc instead — DTC pull away from the marketplace."},
-                  {"index": 3, "section": "Competitor Moves",
+                  {"index": 3, "section": "Care Delivery & New Models",
                    "summary": "New industry data shows telehealth usage has fallen 48% from its 2020 pandemic peak, with patients increasingly preferring phone or in-person visits. Pure-play virtual-care providers are seeing engagement decline as hybrid care becomes the norm.",
                    "zocdoc_relevance": "Declining telehealth engagement strengthens Zocdoc's in-person and hybrid booking core versus pure-play rivals."},
                   {"index": 1, "section": "Regulatory & Policy",
@@ -634,6 +692,16 @@ jobs:
                   {"index": 2, "section": "Regulatory & Policy",
                    "summary": "ACA exchange enrollment is dropping sharply in several states and six insurers, including Cigna, plan to exit multiple markets after 2026. Millions of enrollees face losing their plan or having far fewer options.",
                    "zocdoc_relevance": "Millions losing exchange coverage become active provider-shoppers — prime marketplace demand."},
+              ],
+              "gaps": [
+                  {"topic": "Clinician burnout & supply",
+                   "note": "No major workforce stories this week, but provider availability is the constraint on bookable supply — worth watching as staffing pressures build."},
+                  {"topic": "Patient trust & brand",
+                   "note": "Quiet this week, yet trust in where patients book care is the moat a marketplace defends against DTC and health-system schedulers."},
+                  {"topic": "Data privacy & cybersecurity",
+                   "note": "No breach news surfaced, but a single healthcare data incident can reshape patient willingness to share information with digital platforms."},
+                  {"topic": "Women's & maternal health",
+                   "note": "Under-covered this cycle despite being a high-intent booking category and a frequent entry point for new patients to a marketplace."},
               ],
           }
 
